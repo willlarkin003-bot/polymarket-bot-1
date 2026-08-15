@@ -106,3 +106,14 @@ def test_skips_markets_missing_a_slug():
 def test_skips_markets_when_bbo_call_raises():
     client = _fake_client([_market("errors-out")], {})  # bbo_by_slug has no entry -> KeyError raised
     assert fetch_open_sports_markets(client) == []
+
+
+def test_sorts_by_volume_descending_to_surface_liquid_markets():
+    # The `sports` category is dominated by far-future, near-zero-liquidity
+    # futures markets; without sorting, real actively-traded games can get
+    # buried past the fetch limit entirely.
+    client = _fake_client([], {})
+    fetch_open_sports_markets(client)
+    query = client.markets.list.call_args[0][0]
+    assert query["orderBy"] == ["volume"]
+    assert query["orderDirection"] == "desc"

@@ -49,12 +49,19 @@ def fetch_open_sports_markets(client: PolymarketUS, limit: int = 50) -> List[Spo
     public market-data API. Reads (markets.list, markets.bbo) don't require
     authentication, so `client` can be a PolymarketUS instance with no
     key_id/secret_key set.
+
+    Sorted by volume descending: the `sports` category also includes a large
+    number of far-future, near-zero-liquidity futures markets (e.g. full-season
+    championship futures), and default ordering surfaces those ahead of the
+    actively-traded, near-term game lines this bot actually wants to trade.
     """
     response = client.markets.list({
         "categories": ["sports"],
         "active": True,
         "closed": False,
         "limit": limit,
+        "orderBy": ["volume"],
+        "orderDirection": "desc",
     })
 
     markets: List[SportsMarket] = []
