@@ -30,17 +30,23 @@ def _extract_yes_price(bbo: dict) -> Optional[float]:
     Preference order: `longQuote` (Polymarket's own reference price for the long
     side, present regardless of book depth) -> midpoint of best bid/ask, when
     both actually exist -> the last traded long price, as a final fallback.
+
+    The live `bbo` response nests all of these under a `marketData` key, unlike
+    the SDK's own type hints (which claim they're top-level) - unwrap that first,
+    falling back to treating `bbo` as already-flat for forward compatibility.
     """
-    long_quote = _amount(bbo.get("longQuote"))
+    data = bbo.get("marketData", bbo)
+
+    long_quote = _amount(data.get("longQuote"))
     if long_quote is not None:
         return long_quote
 
-    best_bid = _amount(bbo.get("bestBid"))
-    best_ask = _amount(bbo.get("bestAsk"))
+    best_bid = _amount(data.get("bestBid"))
+    best_ask = _amount(data.get("bestAsk"))
     if best_bid is not None and best_ask is not None:
         return (best_bid + best_ask) / 2
 
-    last_sample = bbo.get("lastPriceSample") or {}
+    last_sample = data.get("lastPriceSample") or {}
     return _amount(last_sample.get("longPx"))
 
 
