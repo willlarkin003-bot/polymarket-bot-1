@@ -2,7 +2,16 @@ import sqlite3
 import time
 from contextlib import closing
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+
+def _current_week_start_ts() -> float:
+    """Start of the current calendar week (Monday 00:00 UTC), as a Unix timestamp."""
+    now = datetime.now(timezone.utc)
+    monday = now.date() - timedelta(days=now.weekday())
+    week_start = datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc)
+    return week_start.timestamp()
 
 
 @dataclass(frozen=True)
@@ -80,10 +89,10 @@ class StateStore:
             row = conn.execute("SELECT COUNT(DISTINCT market_id) FROM trades").fetchone()
             return row[0] if row else 0
 
-    def realized_loss_today_usd(self) -> float:
-        """Placeholder for daily-loss tracking: sums staked USD on trades opened in the
-        last 24h. Wire this up to actual settlement/PnL data once positions resolve."""
-        cutoff = time.time() - 86400
+    def spent_this_week_usd(self) -> float:
+        """Total staked USD on trades opened since the start of the current calendar
+        week (Monday 00:00 UTC). Resets automatically once a new week begins."""
+        cutoff = _current_week_start_ts()
         with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT COALESCE(SUM(stake_usd), 0) FROM trades WHERE timestamp >= ?",

@@ -34,7 +34,6 @@ class Config:
     kelly_multiplier: float
     max_position_pct: float
     max_open_positions: int
-    max_daily_loss_pct: float
     min_edge: float
     dry_run: bool
 
@@ -50,7 +49,6 @@ class Config:
             kelly_multiplier=_float_env("KELLY_MULTIPLIER", 0.5),
             max_position_pct=_float_env("MAX_POSITION_PCT", 0.05),
             max_open_positions=_int_env("MAX_OPEN_POSITIONS", 10),
-            max_daily_loss_pct=_float_env("MAX_DAILY_LOSS_PCT", 0.10),
             min_edge=_float_env("MIN_EDGE", 0.04),
             dry_run=_bool_env("DRY_RUN", True),
         )

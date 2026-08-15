@@ -29,9 +29,9 @@ class RiskManager:
         if self.state.open_position_count() >= self.config.max_open_positions:
             return RiskCheck(False, "max_open_positions reached")
 
-        daily_loss_limit = self.config.max_daily_loss_pct * self.config.bankroll_usd
-        if self.state.realized_loss_today_usd() >= daily_loss_limit:
-            return RiskCheck(False, "daily loss limit reached")
+        weekly_spent = self.state.spent_this_week_usd()
+        if weekly_spent + decision.stake_usd > self.config.bankroll_usd:
+            return RiskCheck(False, "weekly bankroll fully committed; resets Monday 00:00 UTC")
 
         max_stake = self.config.max_position_pct * self.config.bankroll_usd
         if decision.stake_usd > max_stake:

@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 
 import pytest
 
@@ -14,7 +15,7 @@ def config():
     return Config(
         private_key="", funder_address="", clob_host="", chain_id=137,
         anthropic_api_key="", bankroll_usd=1000.0, kelly_multiplier=0.5,
-        max_position_pct=0.05, max_open_positions=2, max_daily_loss_pct=0.1,
+        max_position_pct=0.05, max_open_positions=2,
         min_edge=0.04, dry_run=True,
     )
 
@@ -67,3 +68,21 @@ def test_rejects_when_max_open_positions_reached(config, state):
     state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, True, 0.0))
     check = risk.check("m3", make_decision())
     assert not check.approved
+
+
+def test_rejects_when_weekly_bankroll_exhausted(config, state):
+    from src.state_store import Trade
+    risk = RiskManager(config, state)
+    state.record_trade(Trade("m1", "YES", 0.5, 980.0, 0.6, 0.1, True, time.time()))
+    check = risk.check("m2", make_decision(stake_usd=40.0))
+    assert not check.approved
+    assert "weekly" in check.reason
+
+
+def test_weekly_bankroll_resets_for_trades_from_prior_weeks(config, state):
+    from src.state_store import Trade
+    risk = RiskManager(config, state)
+    three_weeks_ago = time.time() - 21 * 86400
+    state.record_trade(Trade("m1", "YES", 0.5, 980.0, 0.6, 0.1, True, three_weeks_ago))
+    check = risk.check("m2", make_decision(stake_usd=40.0))
+    assert check.approved
