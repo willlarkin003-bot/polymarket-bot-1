@@ -73,12 +73,19 @@ class TradingAgent:
         logger.info("Fetched %d open sports markets", len(markets))
         self._odds_cache.clear()
 
+        already_held = 0
+        no_signal = 0
+        risk_rejected = 0
+        placed = 0
+
         for market in markets:
             if self.state.has_position(market.market_id):
+                already_held += 1
                 continue
 
             model_prob, source = self._estimate_probability(market)
             if model_prob is None:
+                no_signal += 1
                 continue
 
             decision = decide_bet(
@@ -93,6 +100,7 @@ class TradingAgent:
             check = self.risk.check(market.market_id, decision)
             if not check.approved:
                 logger.debug("Skipping market %s: %s", market.market_id, check.reason)
+                risk_rejected += 1
                 continue
 
             price = market.yes_price if decision.side == "YES" else 1.0 - market.yes_price
@@ -120,6 +128,12 @@ class TradingAgent:
                     timestamp=time.time(),
                 )
             )
+            placed += 1
+
+        logger.info(
+            "Round complete: %d markets, %d already held, %d no signal, %d risk-rejected, %d placed",
+            len(markets), already_held, no_signal, risk_rejected, placed,
+        )
 
     def run_loop(self, interval_seconds: int) -> None:
         logger.info("Starting agent loop, polling every %ds (dry_run=%s)",
