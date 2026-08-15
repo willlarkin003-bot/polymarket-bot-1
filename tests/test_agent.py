@@ -52,7 +52,7 @@ def test_summary_counts_already_held_markets(monkeypatch, tmp_path, caplog):
     agent = agent_module.TradingAgent(_config())
     from src.state_store import Trade
     agent.state.record_trade(
-        Trade("m1", "YES", 0.5, 10.0, 0.6, 0.1, True, 0.0)
+        Trade("m1", "YES", 0.5, 10.0, 0.6, 0.1, "sportsbook", True, 0.0)
     )
 
     with caplog.at_level(logging.INFO):

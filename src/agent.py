@@ -12,7 +12,7 @@ from src.risk_manager import RiskManager
 from src.signal_engine import SignalEngine
 from src.sport_keys import guess_sport_key
 from src.sports_markets import SportsMarket, fetch_open_sports_markets
-from src.state_store import StateStore, Trade
+from src.state_store import RoundSummary, StateStore, Trade
 from src.value_bet_finder import find_value_bet_signal
 
 logger = logging.getLogger(__name__)
@@ -124,6 +124,7 @@ class TradingAgent:
                     stake_usd=decision.stake_usd,
                     model_prob=model_prob,
                     edge=decision.edge,
+                    source=source,
                     dry_run=self.config.dry_run,
                     timestamp=time.time(),
                 )
@@ -133,6 +134,16 @@ class TradingAgent:
         logger.info(
             "Round complete: %d markets, %d already held, %d no signal, %d risk-rejected, %d placed",
             len(markets), already_held, no_signal, risk_rejected, placed,
+        )
+        self.state.record_round(
+            RoundSummary(
+                markets_fetched=len(markets),
+                already_held=already_held,
+                no_signal=no_signal,
+                risk_rejected=risk_rejected,
+                placed=placed,
+                timestamp=time.time(),
+            )
         )
 
     def run_loop(self, interval_seconds: int) -> None:
