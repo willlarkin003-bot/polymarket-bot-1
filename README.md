@@ -1,9 +1,10 @@
-# Polymarket Sports Trading Agent
+# Polymarket US Sports Trading Agent
 
-An autonomous agent that reads live sports markets on [Polymarket](https://polymarket.com),
-cross-references them against live odds from real sportsbooks to find genuine value bets, sizes
-a position with the **Kelly criterion**, and places the order through Polymarket's official CLOB
-SDK. Falls back to a Claude probability estimate only for markets sportsbooks don't cover.
+An autonomous agent that reads live sports markets on [Polymarket US](https://polymarket.us)
+(the CFTC-regulated US exchange, not the offshore polymarket.com site), cross-references them
+against live odds from real sportsbooks to find genuine value bets, sizes a position with the
+**Kelly criterion**, and places the order through Polymarket US's official Python SDK. Falls
+back to a Claude probability estimate only for markets sportsbooks don't cover.
 
 ## Read this first
 
@@ -12,6 +13,15 @@ SDK. Falls back to a Claude probability estimate only for markets sportsbooks do
 - Any specific return numbers you've seen in videos or marketing about "AI trading bots"
   (win rates, overnight profits, etc.) are **not** reproduced or guaranteed by this code.
   Past results of any strategy, on any account, do not predict future results.
+- This uses Polymarket US's `key_id`/`secret_key` API credentials (Settings -> Trading API in
+  the app) — not a crypto wallet private key. Lower custody risk than the offshore site, but
+  still a live trading credential; treat it accordingly.
+- **`polymarket_client.py`'s NO/short-side pricing is a well-reasoned inference, not a verified
+  fact.** `CreateOrderParams` uses one `price` field for both `ORDER_INTENT_BUY_LONG` and
+  `ORDER_INTENT_BUY_SHORT`, which strongly implies a single unified 0-1 price space (same
+  convention as Kalshi) rather than the API auto-flipping the price for you — so this code
+  submits `1 - yes_price` for NO bets. Verify this against a small manual order before trusting
+  it with real size; if it's wrong, NO-side bets would be mis-priced.
 - The sportsbook cross-referencing (see below) is a real edge signal, but the Polymarket-to-game
   matching (`src/market_matcher.py`) is best-effort text matching. Watch the logged `matched %s`
   team names for the first while and confirm they're actually right before trusting it with size.
@@ -23,7 +33,7 @@ SDK. Falls back to a Claude probability estimate only for markets sportsbooks do
 ## How it works
 
 ```
-sports_markets.py   -> pulls open sports markets from Polymarket's Gamma API
+sports_markets.py   -> pulls active sports markets + best-bid/ask from Polymarket US
 odds_provider.py    -> pulls live moneyline odds from real sportsbooks (The Odds API)
 sport_keys.py       -> guesses which sport/league a Polymarket question is about
 market_matcher.py   -> matches a Polymarket market to the sportsbook game it's asking about
@@ -31,12 +41,14 @@ value_bet_finder.py -> de-vigs + averages sportsbook odds into a consensus win p
 signal_engine.py    -> Claude fallback P(YES) for markets with no confident sportsbook match
 kelly.py            -> converts (model probability, market price) into a bet size
 risk_manager.py     -> caps position size, open positions, and total weekly spend
-polymarket_client.py -> signs and submits the order via py-clob-client (or logs it, in dry run)
+polymarket_client.py -> submits the order via the polymarket-us SDK (or logs it, in dry run)
 state_store.py      -> SQLite ledger of positions/trades, so the agent never double-bets a market
 agent.py            -> ties the above into a poll loop
 ```
 
 ## Setup
+
+Requires Python 3.10+ (the `polymarket-us` SDK's minimum).
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -48,8 +60,8 @@ Required environment variables (see `.env.example`):
 
 | Variable | Purpose |
 |---|---|
-| `POLYMARKET_PRIVATE_KEY` | Private key of the wallet that funds and signs orders. **Never commit this.** |
-| `POLYMARKET_FUNDER_ADDRESS` | Polymarket proxy wallet address holding your USDC. |
+| `POLYMARKET_KEY_ID` | Polymarket US API key ID (Settings -> Trading API). **Never commit this.** |
+| `POLYMARKET_SECRET_KEY` | Polymarket US API secret key, paired with the above. **Never commit this.** |
 | `ANTHROPIC_API_KEY` | Fallback probability estimate, only used when no sportsbook match exists. |
 | `ODDS_API_KEY` | [The Odds API](https://the-odds-api.com) key. Powers the real value-bet signal — leave blank and every market falls back to the weaker Claude-only estimate. |
 | `MIN_BOOKMAKERS` | Minimum number of books that must quote both sides of a game before its consensus is trusted (default 3). |
@@ -103,9 +115,10 @@ For each open Polymarket sports market, `agent.py` (`_estimate_probability`) doe
 2. `odds_provider.fetch_events` pulls live moneyline odds for that sport from every US
    bookmaker The Odds API covers (cached per sport for the duration of one `run_once` pass).
 3. `market_matcher.match_market` figures out which game the Polymarket question is about and
-   which team's win corresponds to its YES outcome — either directly, if Gamma's `outcomes`
-   field already names the team, or by extracting the subject team from "Will X beat Y?"
-   phrasing. Below `MATCH_CONFIDENCE`, it gives up rather than guessing.
+   which team's win corresponds to its YES outcome — either directly, from the market's own
+   `outcome`/`team.name` field (Polymarket US markets are already per-outcome), or by
+   extracting the subject team from "Will X beat Y?" phrasing as a fallback. Below
+   `MATCH_CONFIDENCE`, it gives up rather than guessing.
 4. `odds_provider.consensus_probability` removes each bookmaker's vig
    (`american_to_implied_prob` + `devig_two_way`) and averages the fair probability across
    every book that quoted both sides — that average is the "true" probability estimate.

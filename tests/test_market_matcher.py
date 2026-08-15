@@ -5,7 +5,7 @@ from src.sports_markets import SportsMarket
 
 def _market(question, outcome_labels, description=""):
     return SportsMarket(
-        market_id="m1", yes_token_id="t1", no_token_id="t2",
+        market_id="m1",
         question=question, description=description, yes_price=0.5,
         outcome_labels=outcome_labels,
     )

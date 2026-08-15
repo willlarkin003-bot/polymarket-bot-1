@@ -1,70 +1,59 @@
-import json
 from dataclasses import dataclass
 from typing import List
 
-import requests
-
-GAMMA_API = "https://gamma-api.polymarket.com"
+from polymarket_us import PolymarketUS
 
 
 @dataclass(frozen=True)
 class SportsMarket:
-    market_id: str  # condition_id, used as the CLOB market identifier
-    yes_token_id: str
-    no_token_id: str
+    market_id: str  # the market slug - used for state tracking and order placement
     question: str
     description: str
-    yes_price: float
-    outcome_labels: List[str]  # e.g. ["Los Angeles Lakers", "Boston Celtics"] or ["Yes", "No"]
+    yes_price: float  # midpoint of best bid/ask, proxy for the market-implied probability
+    outcome_labels: List[str]  # [team/outcome name this market's LONG side represents]
 
 
-def _parse_json_list(value):
-    if isinstance(value, str):
-        return json.loads(value)
-    return value
-
-
-def fetch_open_sports_markets(limit: int = 50) -> List[SportsMarket]:
-    """Pull currently active, unresolved sports markets from Polymarket's Gamma API.
-
-    Gamma's exact filter params have changed over time - if this stops returning
-    results, check the current schema at https://docs.polymarket.com and adjust
-    the params/parsing below accordingly.
+def fetch_open_sports_markets(client: PolymarketUS, limit: int = 50) -> List[SportsMarket]:
+    """Pull active sports markets and their current best-bid/ask midpoint from the
+    Polymarket US public market-data API. Reads (markets.list, markets.bbo) don't
+    require authentication, so `client` can be a PolymarketUS instance with no
+    key_id/secret_key set.
     """
-    resp = requests.get(
-        f"{GAMMA_API}/markets",
-        params={
-            "active": "true",
-            "closed": "false",
-            "tag": "sports",
-            "limit": limit,
-            "order": "volume",
-            "ascending": "false",
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
-    raw_markets = resp.json()
+    response = client.markets.list({
+        "categories": ["sports"],
+        "active": True,
+        "closed": False,
+        "limit": limit,
+    })
 
     markets: List[SportsMarket] = []
-    for m in raw_markets:
-        try:
-            token_ids = _parse_json_list(m["clobTokenIds"])
-            outcome_prices = _parse_json_list(m.get("outcomePrices"))
-            outcome_labels = _parse_json_list(m.get("outcomes")) or ["Yes", "No"]
-
-            markets.append(
-                SportsMarket(
-                    market_id=m["conditionId"],
-                    yes_token_id=token_ids[0],
-                    no_token_id=token_ids[1],
-                    question=m.get("question", ""),
-                    description=m.get("description", ""),
-                    yes_price=float(outcome_prices[0]),
-                    outcome_labels=[str(x) for x in outcome_labels],
-                )
-            )
-        except (KeyError, IndexError, TypeError, ValueError):
+    for m in response.get("markets", []):
+        slug = m.get("slug")
+        if not slug:
             continue
+
+        try:
+            bbo = client.markets.bbo(slug)
+            best_bid = float(bbo["bestBid"]["value"])
+            best_ask = float(bbo["bestAsk"]["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        mid_price = (best_bid + best_ask) / 2
+        if not 0.0 < mid_price < 1.0:
+            continue
+
+        team = m.get("team") or {}
+        outcome_label = m.get("outcome") or team.get("name") or "Yes"
+
+        markets.append(
+            SportsMarket(
+                market_id=slug,
+                question=m.get("title", ""),
+                description=m.get("description", ""),
+                yes_price=mid_price,
+                outcome_labels=[outcome_label],
+            )
+        )
 
     return markets

@@ -2,6 +2,8 @@ import logging
 import time
 from typing import Optional, Tuple
 
+from polymarket_us import PolymarketUS
+
 from src.config import Config
 from src.kelly import decide_bet
 from src.odds_provider import fetch_events
@@ -22,7 +24,8 @@ class TradingAgent:
         self.state = StateStore()
         self.risk = RiskManager(config, self.state)
         self.signals = SignalEngine(api_key=config.anthropic_api_key) if config.anthropic_api_key else None
-        self.client = PolymarketClient(config)
+        self.polymarket = PolymarketUS(key_id=config.key_id or None, secret_key=config.secret_key or None)
+        self.client = PolymarketClient(config, self.polymarket)
         self._odds_cache = {}
 
     def _events_for_sport(self, sport_key: str) -> list:
@@ -66,7 +69,7 @@ class TradingAgent:
         return None, None
 
     def run_once(self) -> None:
-        markets = fetch_open_sports_markets()
+        markets = fetch_open_sports_markets(self.polymarket)
         logger.info("Fetched %d open sports markets", len(markets))
         self._odds_cache.clear()
 
@@ -92,14 +95,18 @@ class TradingAgent:
                 logger.debug("Skipping market %s: %s", market.market_id, check.reason)
                 continue
 
-            token_id = market.yes_token_id if decision.side == "YES" else market.no_token_id
             price = market.yes_price if decision.side == "YES" else 1.0 - market.yes_price
 
             logger.info(
                 "Placing %s on market %r (signal=%s): model_prob=%.3f edge=%.3f stake=$%.2f",
                 decision.side, market.question, source, model_prob, decision.edge, decision.stake_usd,
             )
-            self.client.buy_shares(token_id=token_id, price=price, stake_usd=decision.stake_usd)
+            self.client.place_order(
+                market_slug=market.market_id,
+                side=decision.side,
+                price=price,
+                stake_usd=decision.stake_usd,
+            )
 
             self.state.record_trade(
                 Trade(

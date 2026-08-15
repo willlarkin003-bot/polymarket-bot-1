@@ -25,10 +25,8 @@ def _int_env(name: str, default: int) -> int:
 
 @dataclass(frozen=True)
 class Config:
-    private_key: str
-    funder_address: str
-    clob_host: str
-    chain_id: int
+    key_id: str
+    secret_key: str
     anthropic_api_key: str
     odds_api_key: str
     bankroll_usd: float
@@ -43,10 +41,8 @@ class Config:
     @staticmethod
     def load() -> "Config":
         return Config(
-            private_key=os.getenv("POLYMARKET_PRIVATE_KEY", ""),
-            funder_address=os.getenv("POLYMARKET_FUNDER_ADDRESS", ""),
-            clob_host=os.getenv("POLYMARKET_CLOB_HOST", "https://clob.polymarket.com"),
-            chain_id=_int_env("POLYMARKET_CHAIN_ID", 137),
+            key_id=os.getenv("POLYMARKET_KEY_ID", ""),
+            secret_key=os.getenv("POLYMARKET_SECRET_KEY", ""),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             odds_api_key=os.getenv("ODDS_API_KEY", ""),
             bankroll_usd=_float_env("BANKROLL_USD", 1000.0),
@@ -63,8 +59,8 @@ class Config:
         missing = [
             name
             for name, val in (
-                ("POLYMARKET_PRIVATE_KEY", self.private_key),
-                ("POLYMARKET_FUNDER_ADDRESS", self.funder_address),
+                ("POLYMARKET_KEY_ID", self.key_id),
+                ("POLYMARKET_SECRET_KEY", self.secret_key),
             )
             if not val
         ]

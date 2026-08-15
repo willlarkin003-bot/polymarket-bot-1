@@ -5,7 +5,7 @@ from src.value_bet_finder import find_value_bet_signal
 
 def test_finds_value_bet_signal_from_matched_event():
     market = SportsMarket(
-        market_id="m1", yes_token_id="t1", no_token_id="t2",
+        market_id="m1",
         question="Lakers vs Celtics", description="",
         yes_price=0.5, outcome_labels=["Los Angeles Lakers", "Boston Celtics"],
     )
@@ -28,7 +28,7 @@ def test_finds_value_bet_signal_from_matched_event():
 
 def test_returns_none_when_no_match():
     market = SportsMarket(
-        market_id="m1", yes_token_id="t1", no_token_id="t2",
+        market_id="m1",
         question="Will it rain tomorrow?", description="",
         yes_price=0.5, outcome_labels=["Yes", "No"],
     )
