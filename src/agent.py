@@ -1,13 +1,17 @@
 import logging
 import time
+from typing import Optional, Tuple
 
 from src.config import Config
 from src.kelly import decide_bet
+from src.odds_provider import fetch_events
 from src.polymarket_client import PolymarketClient
 from src.risk_manager import RiskManager
 from src.signal_engine import SignalEngine
-from src.sports_markets import fetch_open_sports_markets
+from src.sport_keys import guess_sport_key
+from src.sports_markets import SportsMarket, fetch_open_sports_markets
 from src.state_store import StateStore, Trade
+from src.value_bet_finder import find_value_bet_signal
 
 logger = logging.getLogger(__name__)
 
@@ -17,25 +21,61 @@ class TradingAgent:
         self.config = config
         self.state = StateStore()
         self.risk = RiskManager(config, self.state)
-        self.signals = SignalEngine(api_key=config.anthropic_api_key)
+        self.signals = SignalEngine(api_key=config.anthropic_api_key) if config.anthropic_api_key else None
         self.client = PolymarketClient(config)
+        self._odds_cache = {}
+
+    def _events_for_sport(self, sport_key: str) -> list:
+        if sport_key not in self._odds_cache:
+            try:
+                self._odds_cache[sport_key] = fetch_events(sport_key, self.config.odds_api_key)
+            except Exception:
+                logger.exception("Failed to fetch sportsbook odds for %s", sport_key)
+                self._odds_cache[sport_key] = []
+        return self._odds_cache[sport_key]
+
+    def _estimate_probability(self, market: SportsMarket) -> Tuple[Optional[float], Optional[str]]:
+        """Prefer a real edge (sportsbook consensus vs Polymarket price) over an
+        LLM guess. Falls back to Claude only when no confident, well-covered
+        sportsbook match exists for this market."""
+        if self.config.odds_api_key:
+            sport_key = guess_sport_key(f"{market.question} {market.description}")
+            if sport_key:
+                events = self._events_for_sport(sport_key)
+                signal = find_value_bet_signal(
+                    market, events, confidence_threshold=self.config.match_confidence
+                )
+                if signal and signal.num_bookmakers >= self.config.min_bookmakers:
+                    logger.info(
+                        "Sportsbook consensus for %r: %.3f (%d books, matched %s)",
+                        market.question, signal.model_prob, signal.num_bookmakers, signal.yes_team,
+                    )
+                    return signal.model_prob, "sportsbook"
+
+        if self.signals is not None:
+            try:
+                prob = self.signals.estimate_probability(
+                    question=market.question,
+                    description=market.description,
+                    yes_price=market.yes_price,
+                )
+                return prob, "llm"
+            except Exception:
+                logger.exception("Signal generation failed for market %s", market.market_id)
+
+        return None, None
 
     def run_once(self) -> None:
         markets = fetch_open_sports_markets()
         logger.info("Fetched %d open sports markets", len(markets))
+        self._odds_cache.clear()
 
         for market in markets:
             if self.state.has_position(market.market_id):
                 continue
 
-            try:
-                model_prob = self.signals.estimate_probability(
-                    question=market.question,
-                    description=market.description,
-                    yes_price=market.yes_price,
-                )
-            except Exception:
-                logger.exception("Signal generation failed for market %s", market.market_id)
+            model_prob, source = self._estimate_probability(market)
+            if model_prob is None:
                 continue
 
             decision = decide_bet(
@@ -56,8 +96,8 @@ class TradingAgent:
             price = market.yes_price if decision.side == "YES" else 1.0 - market.yes_price
 
             logger.info(
-                "Placing %s on market %r: model_prob=%.3f edge=%.3f stake=$%.2f",
-                decision.side, market.question, model_prob, decision.edge, decision.stake_usd,
+                "Placing %s on market %r (signal=%s): model_prob=%.3f edge=%.3f stake=$%.2f",
+                decision.side, market.question, source, model_prob, decision.edge, decision.stake_usd,
             )
             self.client.buy_shares(token_id=token_id, price=price, stake_usd=decision.stake_usd)
 

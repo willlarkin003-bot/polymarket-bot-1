@@ -30,11 +30,14 @@ class Config:
     clob_host: str
     chain_id: int
     anthropic_api_key: str
+    odds_api_key: str
     bankroll_usd: float
     kelly_multiplier: float
     max_position_pct: float
     max_open_positions: int
     min_edge: float
+    min_bookmakers: int
+    match_confidence: float
     dry_run: bool
 
     @staticmethod
@@ -45,11 +48,14 @@ class Config:
             clob_host=os.getenv("POLYMARKET_CLOB_HOST", "https://clob.polymarket.com"),
             chain_id=_int_env("POLYMARKET_CHAIN_ID", 137),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+            odds_api_key=os.getenv("ODDS_API_KEY", ""),
             bankroll_usd=_float_env("BANKROLL_USD", 1000.0),
             kelly_multiplier=_float_env("KELLY_MULTIPLIER", 0.5),
             max_position_pct=_float_env("MAX_POSITION_PCT", 0.05),
             max_open_positions=_int_env("MAX_OPEN_POSITIONS", 10),
             min_edge=_float_env("MIN_EDGE", 0.04),
+            min_bookmakers=_int_env("MIN_BOOKMAKERS", 3),
+            match_confidence=_float_env("MATCH_CONFIDENCE", 0.6),
             dry_run=_bool_env("DRY_RUN", True),
         )
 

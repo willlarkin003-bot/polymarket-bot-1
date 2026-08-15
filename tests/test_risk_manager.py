@@ -14,9 +14,9 @@ from src.state_store import StateStore
 def config():
     return Config(
         private_key="", funder_address="", clob_host="", chain_id=137,
-        anthropic_api_key="", bankroll_usd=1000.0, kelly_multiplier=0.5,
+        anthropic_api_key="", odds_api_key="", bankroll_usd=1000.0, kelly_multiplier=0.5,
         max_position_pct=0.05, max_open_positions=2,
-        min_edge=0.04, dry_run=True,
+        min_edge=0.04, min_bookmakers=3, match_confidence=0.6, dry_run=True,
     )
 
 

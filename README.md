@@ -1,8 +1,9 @@
 # Polymarket Sports Trading Agent
 
 An autonomous agent that reads live sports markets on [Polymarket](https://polymarket.com),
-asks Claude for a calibrated win-probability estimate, sizes a position with the
-**Kelly criterion**, and places the order through Polymarket's official CLOB SDK.
+cross-references them against live odds from real sportsbooks to find genuine value bets, sizes
+a position with the **Kelly criterion**, and places the order through Polymarket's official CLOB
+SDK. Falls back to a Claude probability estimate only for markets sportsbooks don't cover.
 
 ## Read this first
 
@@ -11,22 +12,28 @@ asks Claude for a calibrated win-probability estimate, sizes a position with the
 - Any specific return numbers you've seen in videos or marketing about "AI trading bots"
   (win rates, overnight profits, etc.) are **not** reproduced or guaranteed by this code.
   Past results of any strategy, on any account, do not predict future results.
-- The LLM probability estimate in `src/signal_engine.py` is a starting point, not a validated
-  edge. It only knows what you put in the prompt — plug in real odds/injury/lineup data sources
-  before trusting it with size.
+- The sportsbook cross-referencing (see below) is a real edge signal, but the Polymarket-to-game
+  matching (`src/market_matcher.py`) is best-effort text matching. Watch the logged `matched %s`
+  team names for the first while and confirm they're actually right before trusting it with size.
+- The Claude fallback signal (`src/signal_engine.py`) only knows what's in the prompt — it's
+  meaningfully weaker than the sportsbook consensus and only used when no confident match exists.
 - Start in dry-run mode, on a small bankroll figure, and watch the logs before ever setting
   `DRY_RUN=false`.
 
 ## How it works
 
 ```
-sports_markets.py  -> pulls open sports markets from Polymarket's Gamma API
-signal_engine.py   -> asks Claude for a calibrated P(YES) given the market question
-kelly.py           -> converts (model probability, market price) into a bet size
-risk_manager.py    -> caps position size, open positions, and total weekly spend
+sports_markets.py   -> pulls open sports markets from Polymarket's Gamma API
+odds_provider.py    -> pulls live moneyline odds from real sportsbooks (The Odds API)
+sport_keys.py       -> guesses which sport/league a Polymarket question is about
+market_matcher.py   -> matches a Polymarket market to the sportsbook game it's asking about
+value_bet_finder.py -> de-vigs + averages sportsbook odds into a consensus win probability
+signal_engine.py    -> Claude fallback P(YES) for markets with no confident sportsbook match
+kelly.py            -> converts (model probability, market price) into a bet size
+risk_manager.py     -> caps position size, open positions, and total weekly spend
 polymarket_client.py -> signs and submits the order via py-clob-client (or logs it, in dry run)
-state_store.py     -> SQLite ledger of positions/trades, so the agent never double-bets a market
-agent.py           -> ties the above into a poll loop
+state_store.py      -> SQLite ledger of positions/trades, so the agent never double-bets a market
+agent.py            -> ties the above into a poll loop
 ```
 
 ## Setup
@@ -43,7 +50,10 @@ Required environment variables (see `.env.example`):
 |---|---|
 | `POLYMARKET_PRIVATE_KEY` | Private key of the wallet that funds and signs orders. **Never commit this.** |
 | `POLYMARKET_FUNDER_ADDRESS` | Polymarket proxy wallet address holding your USDC. |
-| `ANTHROPIC_API_KEY` | Used by `signal_engine.py` to generate probability estimates. |
+| `ANTHROPIC_API_KEY` | Fallback probability estimate, only used when no sportsbook match exists. |
+| `ODDS_API_KEY` | [The Odds API](https://the-odds-api.com) key. Powers the real value-bet signal — leave blank and every market falls back to the weaker Claude-only estimate. |
+| `MIN_BOOKMAKERS` | Minimum number of books that must quote both sides of a game before its consensus is trusted (default 3). |
+| `MATCH_CONFIDENCE` | Minimum text-match confidence (0–1) to link a Polymarket market to a sportsbook game (default 0.6). |
 | `BANKROLL_USD` | **Weekly** budget. Kelly sizing is computed against it, and once total stakes since Monday 00:00 UTC reach this amount, the agent stops opening new positions until the next Monday, when the count resets. |
 | `DRY_RUN` | `true` (default) logs intended trades without submitting orders. Set `false` to trade live. |
 
@@ -83,6 +93,39 @@ that would push that total past `BANKROLL_USD`. Once the week's budget is commit
 simply stops opening positions — existing open positions are untouched — until the next Monday,
 when the sum naturally resets to zero. There's no separate "top up" step in code: if you're
 adding fresh USDC to the wallet each week, just make sure it's there before Monday's reset.
+
+## Value bets via sportsbook cross-referencing
+
+For each open Polymarket sports market, `agent.py` (`_estimate_probability`) does this:
+
+1. `sport_keys.guess_sport_key` keyword-matches the question/description to an Odds API sport
+   (e.g. "NBA" -> `basketball_nba`). Unrecognized sports skip straight to the Claude fallback.
+2. `odds_provider.fetch_events` pulls live moneyline odds for that sport from every US
+   bookmaker The Odds API covers (cached per sport for the duration of one `run_once` pass).
+3. `market_matcher.match_market` figures out which game the Polymarket question is about and
+   which team's win corresponds to its YES outcome — either directly, if Gamma's `outcomes`
+   field already names the team, or by extracting the subject team from "Will X beat Y?"
+   phrasing. Below `MATCH_CONFIDENCE`, it gives up rather than guessing.
+4. `odds_provider.consensus_probability` removes each bookmaker's vig
+   (`american_to_implied_prob` + `devig_two_way`) and averages the fair probability across
+   every book that quoted both sides — that average is the "true" probability estimate.
+5. If fewer than `MIN_BOOKMAKERS` books quoted both sides, the match is discarded (too thin to
+   trust) and the market falls through to the Claude estimate instead.
+
+The resulting probability feeds into `kelly.decide_bet` exactly like the LLM signal did before —
+the difference is it's now backed by real market prices from books that have their own money on
+the line, not a language model's guess. Every placed trade's log line shows which signal source
+was used (`signal=sportsbook` vs `signal=llm`) so you can see how often each is firing.
+
+**What you need to turn this on:**
+- An account and API key at [the-odds-api.com](https://the-odds-api.com) — the free tier is
+  500 requests/month. Each `run_once` pass makes roughly one request per distinct sport
+  represented among the fetched Polymarket markets (cached within that pass, not across runs).
+  On a 15-minute cron with markets spanning 2–3 sports, that's well over 500/month — either
+  slow the cron interval (e.g. hourly) or upgrade the plan once you've validated the matching.
+- `LEAGUE_TO_ODDS_SPORT_KEY` in `src/sport_keys.py` only covers the major US leagues plus a
+  few others out of the box — add entries for any sport/league you trade that isn't in there,
+  or it'll silently fall back to the Claude estimate for those markets.
 
 ## Running unattended
 
