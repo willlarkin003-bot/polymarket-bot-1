@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from polymarket_us import PolymarketUS
 
@@ -9,14 +9,45 @@ class SportsMarket:
     market_id: str  # the market slug - used for state tracking and order placement
     question: str
     description: str
-    yes_price: float  # midpoint of best bid/ask, proxy for the market-implied probability
+    yes_price: float  # market-implied probability of the LONG (yes) side, see _extract_yes_price
     outcome_labels: List[str]  # [team/outcome name this market's LONG side represents]
 
 
+def _amount(value) -> Optional[float]:
+    if not value or value.get("value") is None:
+        return None
+    try:
+        return float(value["value"])
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_yes_price(bbo: dict) -> Optional[float]:
+    """Get a usable current-price estimate for the LONG side, even when the order
+    book is thin or one-sided (common on far-out futures markets - one side of
+    the book, or both, can be completely empty while the market is still active).
+
+    Preference order: `longQuote` (Polymarket's own reference price for the long
+    side, present regardless of book depth) -> midpoint of best bid/ask, when
+    both actually exist -> the last traded long price, as a final fallback.
+    """
+    long_quote = _amount(bbo.get("longQuote"))
+    if long_quote is not None:
+        return long_quote
+
+    best_bid = _amount(bbo.get("bestBid"))
+    best_ask = _amount(bbo.get("bestAsk"))
+    if best_bid is not None and best_ask is not None:
+        return (best_bid + best_ask) / 2
+
+    last_sample = bbo.get("lastPriceSample") or {}
+    return _amount(last_sample.get("longPx"))
+
+
 def fetch_open_sports_markets(client: PolymarketUS, limit: int = 50) -> List[SportsMarket]:
-    """Pull active sports markets and their current best-bid/ask midpoint from the
-    Polymarket US public market-data API. Reads (markets.list, markets.bbo) don't
-    require authentication, so `client` can be a PolymarketUS instance with no
+    """Pull active sports markets and their current price from the Polymarket US
+    public market-data API. Reads (markets.list, markets.bbo) don't require
+    authentication, so `client` can be a PolymarketUS instance with no
     key_id/secret_key set.
     """
     response = client.markets.list({
@@ -34,13 +65,11 @@ def fetch_open_sports_markets(client: PolymarketUS, limit: int = 50) -> List[Spo
 
         try:
             bbo = client.markets.bbo(slug)
-            best_bid = float(bbo["bestBid"]["value"])
-            best_ask = float(bbo["bestAsk"]["value"])
-        except (KeyError, TypeError, ValueError):
+        except Exception:
             continue
 
-        mid_price = (best_bid + best_ask) / 2
-        if not 0.0 < mid_price < 1.0:
+        yes_price = _extract_yes_price(bbo)
+        if yes_price is None or not 0.0 < yes_price < 1.0:
             continue
 
         team = m.get("team") or {}
@@ -51,7 +80,7 @@ def fetch_open_sports_markets(client: PolymarketUS, limit: int = 50) -> List[Spo
                 market_id=slug,
                 question=m.get("title", ""),
                 description=m.get("description", ""),
-                yes_price=mid_price,
+                yes_price=yes_price,
                 outcome_labels=[outcome_label],
             )
         )
