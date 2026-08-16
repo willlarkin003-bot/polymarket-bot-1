@@ -117,7 +117,14 @@ def main() -> None:
         def log_message(self, format: str, *args) -> None:
             pass  # keep the console quiet
 
-    with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
+    try:
+        httpd = socketserver.TCPServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        print(f"Port {PORT} is already in use - the dashboard is probably already running.")
+        print(f"Just open http://localhost:{PORT} in your browser.")
+        return
+
+    with httpd:
         print(f"Dashboard running at http://localhost:{PORT}  (Ctrl+C to stop)")
         httpd.serve_forever()
 
