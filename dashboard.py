@@ -48,6 +48,15 @@ def _outcome_cell(t: dict) -> str:
     return f"{_esc(t['outcome'])} {_pnl_span(t['profit_usd'])}"
 
 
+def _market_cell(t: dict) -> str:
+    if t.get("market_question"):
+        return f"{_esc(t['market_question'])}<div class='subtext'>{_esc(t['market_id'])}</div>"
+    return (
+        f"{_esc(t['market_id'])}"
+        f"<div class='subtext'>question not recorded (bet placed before this feature was added)</div>"
+    )
+
+
 def render_page(state: StateStore, config: Config) -> bytes:
     trades = state.recent_trades(50)
     rounds = state.recent_rounds(50)
@@ -68,8 +77,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
 
     trades_rows = "".join(
         f"<tr><td>{_fmt_ts(t['timestamp'])}</td>"
-        f"<td>{_esc(t['market_question']) if t.get('market_question') else _esc(t['market_id'])}"
-        f"<div class='subtext'>{_esc(t['market_id'])}</div></td>"
+        f"<td>{_market_cell(t)}</td>"
         f"<td>{_esc(t['side'])}</td><td>${t['price']:.2f}</td><td>${t['stake_usd']:.2f}</td>"
         f"<td>{t['model_prob']:.2f}</td><td>{t['edge']:.2f}</td>"
         f"<td>{_esc(t['source'] or '?')}</td>"
