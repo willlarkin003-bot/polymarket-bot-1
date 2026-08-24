@@ -1,3 +1,5 @@
+import pytest
+
 from src.odds_provider import BookmakerLine, SportsbookEvent
 from src.sports_markets import SportsMarket
 from src.value_bet_finder import find_value_bet_signal
@@ -24,6 +26,8 @@ def test_finds_value_bet_signal_from_matched_event():
     assert signal.yes_team == "Los Angeles Lakers"
     assert signal.num_bookmakers == 2
     assert 0.35 < signal.model_prob < 0.45  # Lakers are the underdog in these lines
+    assert signal.avg_yes_odds == pytest.approx(125)  # avg of Lakers' +130/+120
+    assert signal.avg_no_odds == pytest.approx(-145)  # avg of Celtics' -150/-140
 
 
 def test_returns_none_when_no_match():

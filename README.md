@@ -198,6 +198,15 @@ League MVP".) A "Finishes" column shows each bet's resolution date from the mark
 highlighted when it falls inside `NEAR_TERM_WINDOW_DAYS` (see "Near-term markets get priority"
 above) - trades placed before this was added just show "unknown".
 
+Two more columns for evaluating a bet at a glance:
+- **Avg Book Odds** — the raw American odds (e.g. `-145`, `+230`) averaged across every
+  contributing bookmaker for whichever side actually got bet, straight from the sportsbook lines
+  themselves (not the de-vigged fair probability shown in Model P/Edge). Blank (`-`) for
+  LLM-sourced bets, which have no book odds behind them at all.
+- **Potential Payout** — what a $1 Polymarket YES/NO share pays if the bet hits: `stake / price`,
+  with the profit portion shown in parentheses. Pure arithmetic on the already-recorded stake and
+  price, so it's shown for every trade regardless of source or age.
+
 ### Profit & loss tracking
 
 Every round, before looking for new bets, the agent checks each of its still-open positions

@@ -86,10 +86,12 @@ class TradingAgent:
 
     def _estimate_probability(
         self, market: SportsMarket
-    ) -> Tuple[Optional[float], Optional[str], List[str]]:
+    ) -> Tuple[Optional[float], Optional[str], List[str], Optional[float], Optional[float]]:
         """Prefer a real edge (sportsbook consensus vs Polymarket price) over an
         LLM guess. Falls back to Claude only when no confident, well-covered
-        sportsbook match exists for this market."""
+        sportsbook match exists for this market. The last two return values are
+        the average raw American odds books quoted for the YES/NO side
+        respectively - None for LLM-sourced signals, which have no book odds."""
         if self.config.odds_api_key:
             sport_key = guess_sport_key(f"{market.question} {market.description}")
             if sport_key:
@@ -103,7 +105,10 @@ class TradingAgent:
                         market.question, signal.model_prob, signal.num_bookmakers,
                         ", ".join(signal.bookmakers), signal.yes_team,
                     )
-                    return signal.model_prob, "sportsbook", signal.bookmakers
+                    return (
+                        signal.model_prob, "sportsbook", signal.bookmakers,
+                        signal.avg_yes_odds, signal.avg_no_odds,
+                    )
 
         if self.signals is not None:
             try:
@@ -112,12 +117,12 @@ class TradingAgent:
                     description=market.description,
                     yes_price=market.yes_price,
                 )
-                return prob, "llm", []
+                return prob, "llm", [], None, None
             except Exception:
                 logger.exception("Signal generation failed for market %s", market.market_id)
                 self._signal_errors += 1
 
-        return None, None, []
+        return None, None, [], None, None
 
     def run_once(self) -> None:
         settled = self._check_settlements()
@@ -144,7 +149,7 @@ class TradingAgent:
                 already_held += 1
                 continue
 
-            model_prob, source, bookmakers = self._estimate_probability(market)
+            model_prob, source, bookmakers, avg_yes_odds, avg_no_odds = self._estimate_probability(market)
             if model_prob is None:
                 no_signal += 1
                 continue
@@ -165,6 +170,7 @@ class TradingAgent:
                 continue
 
             price = market.yes_price if decision.side == "YES" else 1.0 - market.yes_price
+            avg_book_odds = (avg_yes_odds if decision.side == "YES" else avg_no_odds) or 0.0
 
             logger.info(
                 "Placing %s on market %r (signal=%s): model_prob=%.3f edge=%.3f stake=$%.2f",
@@ -191,6 +197,7 @@ class TradingAgent:
                     timestamp=time.time(),
                     market_question=market.question,
                     resolves_at=market.resolves_at or 0.0,
+                    avg_book_odds=avg_book_odds,
                 )
             )
             placed += 1

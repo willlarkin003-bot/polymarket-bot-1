@@ -5,6 +5,7 @@ import pytest
 
 import src.agent as agent_module
 from src.config import Config
+from src.odds_provider import BookmakerLine, SportsbookEvent
 from src.sports_markets import SportsMarket
 from src.state_store import StateStore, Trade
 
@@ -153,6 +154,35 @@ def test_settled_market_records_realized_pnl(monkeypatch, tmp_path, caplog):
 
     summary = next(r.message for r in caplog.records if "Settled" in r.message and "trade(s)" in r.message)
     assert "1 trade(s)" in summary
+
+
+def test_records_avg_book_odds_for_the_side_actually_bet(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "state.db")
+    monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
+
+    market = SportsMarket(
+        market_id="nba-m1", question="Will the Lakers win the NBA game tonight?",
+        description="", yes_price=0.5, outcome_labels=["Los Angeles Lakers"],
+    )
+    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client, **kwargs: [market])
+
+    event = SportsbookEvent(
+        event_id="e1", home_team="Boston Celtics", away_team="Los Angeles Lakers",
+        commence_time="",
+        lines=[
+            BookmakerLine("book_a", {"Los Angeles Lakers": -300, "Boston Celtics": 250}),
+            BookmakerLine("book_b", {"Los Angeles Lakers": -280, "Boston Celtics": 230}),
+        ],
+    )
+    monkeypatch.setattr(agent_module, "fetch_events", lambda sport_key, api_key: [event])
+
+    agent = agent_module.TradingAgent(_config(odds_api_key="odds-key", min_bookmakers=2))
+    agent.run_once()
+
+    trades = agent.state.recent_trades()
+    assert len(trades) == 1
+    assert trades[0]["side"] == "YES"  # Lakers are big favorites - clear YES edge
+    assert trades[0]["avg_book_odds"] == pytest.approx(-290.0)  # avg(-300, -280)
 
 
 def test_near_term_markets_win_position_slots_over_long_dated_ones(monkeypatch, tmp_path):

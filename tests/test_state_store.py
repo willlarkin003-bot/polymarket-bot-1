@@ -92,6 +92,15 @@ def test_record_trade_stores_resolves_at(state):
     assert trades[0]["resolves_at"] == pytest.approx(resolves_at)
 
 
+def test_record_trade_stores_avg_book_odds(state):
+    state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time(),
+              avg_book_odds=-145.0)
+    )
+    trades = state.recent_trades()
+    assert trades[0]["avg_book_odds"] == pytest.approx(-145.0)
+
+
 def test_long_dated_position_count_counts_far_out_and_unknown_dates(state):
     now = time.time()
     near_term_cutoff = now + 9 * 86400
@@ -201,6 +210,7 @@ def test_migrates_db_created_before_settlement_columns_existed(tmp_path):
     assert len(unsettled) == 1
     assert unsettled[0]["market_question"] == ""
     assert unsettled[0]["resolves_at"] == 0
+    assert unsettled[0]["avg_book_odds"] == 0
 
     summary = store.pnl_summary()
     assert summary["pending"]["count"] == 1

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from src.market_matcher import match_market
-from src.odds_provider import SportsbookEvent, consensus_probability
+from src.odds_provider import SportsbookEvent, average_american_odds, consensus_probability
 from src.sports_markets import SportsMarket
 
 
@@ -13,6 +13,8 @@ class ValueBetSignal:
     yes_team: str
     num_bookmakers: int
     bookmakers: List[str]  # names of the books whose lines fed the consensus, e.g. ["draftkings", "fanduel"]
+    avg_yes_odds: Optional[float]  # average raw American odds for yes_team across contributing books
+    avg_no_odds: Optional[float]  # average raw American odds for the other side
 
 
 def find_value_bet_signal(
@@ -48,4 +50,6 @@ def find_value_bet_signal(
         yes_team=matched.yes_team,
         num_bookmakers=len(contributing_books),
         bookmakers=contributing_books,
+        avg_yes_odds=average_american_odds(matched.event, matched.yes_team),
+        avg_no_odds=average_american_odds(matched.event, other_team),
     )

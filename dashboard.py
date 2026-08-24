@@ -58,6 +58,20 @@ def _market_cell(t: dict) -> str:
     )
 
 
+def _book_odds_cell(odds: float) -> str:
+    if not odds:
+        return '<span class="empty">-</span>'
+    return f"{odds:+.0f}"
+
+
+def _payout_cell(t: dict) -> str:
+    if not t.get("price"):
+        return '<span class="empty">-</span>'
+    payout = t["stake_usd"] / t["price"]
+    profit = payout - t["stake_usd"]
+    return f"${payout:.2f} <span class='subtext'>(+${profit:.2f})</span>"
+
+
 def _finishes_cell(t: dict) -> str:
     resolves_at = t.get("resolves_at")
     if not resolves_at:
@@ -93,14 +107,16 @@ def render_page(state: StateStore, config: Config) -> bytes:
         f"<tr><td>{_fmt_ts(t['timestamp'])}</td>"
         f"<td>{_market_cell(t)}</td>"
         f"<td>{_esc(t['side'])}</td><td>${t['price']:.2f}</td><td>${t['stake_usd']:.2f}</td>"
+        f"<td>{_payout_cell(t)}</td>"
         f"<td>{t['model_prob']:.2f}</td><td>{t['edge']:.2f}</td>"
+        f"<td>{_book_odds_cell(t.get('avg_book_odds', 0))}</td>"
         f"<td>{_esc(t['source'] or '?')}</td>"
         f"<td>{_esc(t['bookmakers']) if t.get('bookmakers') else '-'}</td>"
         f"<td>{'LIVE' if not t['dry_run'] else 'dry-run'}</td>"
         f"<td>{_outcome_cell(t)}</td>"
         f"<td>{_finishes_cell(t)}</td></tr>"
         for t in trades
-    ) or "<tr><td colspan='12' class='empty'>No bet signals logged yet.</td></tr>"
+    ) or "<tr><td colspan='14' class='empty'>No bet signals logged yet.</td></tr>"
 
     page = f"""<!doctype html>
 <html>
@@ -144,7 +160,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
 
   <h2>Recent bet signals</h2>
   <table>
-    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Bookmakers</th><th>Mode</th><th>Outcome</th><th>Finishes</th></tr>
+    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Potential Payout</th><th>Model P</th><th>Edge</th><th>Avg Book Odds</th><th>Signal</th><th>Bookmakers</th><th>Mode</th><th>Outcome</th><th>Finishes</th></tr>
     {trades_rows}
   </table>
 

@@ -56,6 +56,21 @@ def consensus_probability(event: SportsbookEvent, team: str) -> Optional[float]:
     return sum(devigged_probs) / len(devigged_probs)
 
 
+def average_american_odds(event: SportsbookEvent, team: str) -> Optional[float]:
+    """Average the raw (vig included) American odds quoted for `team`, across
+    every bookmaker that quoted both sides - the actual number the books
+    posted, as opposed to consensus_probability's de-vigged fair probability."""
+    other_team = event.away_team if team == event.home_team else event.home_team
+    prices = [
+        line.team_price[team]
+        for line in event.lines
+        if team in line.team_price and other_team in line.team_price
+    ]
+    if not prices:
+        return None
+    return sum(prices) / len(prices)
+
+
 def fetch_events(sport_key: str, api_key: str, regions: str = "us") -> List[SportsbookEvent]:
     """Pull live moneyline odds for `sport_key` from The Odds API
     (https://the-odds-api.com), across every US bookmaker it covers.

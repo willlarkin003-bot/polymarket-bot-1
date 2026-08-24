@@ -43,6 +43,7 @@ class Trade:
     timestamp: float
     market_question: str = ""  # human-readable market title, e.g. "Will the Lakers win?"
     resolves_at: float = 0.0  # market's endDate as a Unix timestamp, 0 if unknown
+    avg_book_odds: float = 0.0  # average raw American odds across contributing books for the side bet, 0 if unknown/llm
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,8 @@ class StateStore:
                     payout_usd REAL NOT NULL DEFAULT 0,
                     profit_usd REAL NOT NULL DEFAULT 0,
                     settled_at REAL NOT NULL DEFAULT 0,
-                    resolves_at REAL NOT NULL DEFAULT 0
+                    resolves_at REAL NOT NULL DEFAULT 0,
+                    avg_book_odds REAL NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -110,6 +112,8 @@ class StateStore:
                 conn.execute("ALTER TABLE trades ADD COLUMN settled_at REAL NOT NULL DEFAULT 0")
             if "resolves_at" not in existing_cols:
                 conn.execute("ALTER TABLE trades ADD COLUMN resolves_at REAL NOT NULL DEFAULT 0")
+            if "avg_book_odds" not in existing_cols:
+                conn.execute("ALTER TABLE trades ADD COLUMN avg_book_odds REAL NOT NULL DEFAULT 0")
 
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_trades_market_id ON trades(market_id)"
@@ -148,8 +152,8 @@ class StateStore:
             conn.execute(
                 """
                 INSERT INTO trades
-                    (market_id, side, price, stake_usd, model_prob, edge, source, bookmakers, dry_run, timestamp, market_question, resolves_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (market_id, side, price, stake_usd, model_prob, edge, source, bookmakers, dry_run, timestamp, market_question, resolves_at, avg_book_odds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     trade.market_id,
@@ -164,6 +168,7 @@ class StateStore:
                     trade.timestamp,
                     trade.market_question,
                     trade.resolves_at,
+                    trade.avg_book_odds,
                 ),
             )
             conn.commit()
