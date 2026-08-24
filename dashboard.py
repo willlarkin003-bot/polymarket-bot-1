@@ -36,6 +36,18 @@ def _signal_errors_cell(count: int) -> str:
     return str(count)
 
 
+def _pnl_span(value: float) -> str:
+    color = "#3fb950" if value > 0 else ("#e5484d" if value < 0 else "#9aa0a6")
+    sign = "+" if value > 0 else ""
+    return f'<span style="color:{color}">{sign}${value:.2f}</span>'
+
+
+def _outcome_cell(t: dict) -> str:
+    if not t.get("settled"):
+        return '<span class="empty">pending</span>'
+    return f"{_esc(t['outcome'])} {_pnl_span(t['profit_usd'])}"
+
+
 def render_page(state: StateStore, config: Config) -> bytes:
     trades = state.recent_trades(50)
     rounds = state.recent_rounds(50)
@@ -44,6 +56,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
     mode = "LIVE TRADING" if not config.dry_run else "DRY RUN (testing)"
     mode_color = "#e5484d" if not config.dry_run else "#3fb950"
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    pnl = state.pnl_summary()
 
     rounds_rows = "".join(
         f"<tr><td>{_fmt_ts(r['timestamp'])}</td><td>{r['markets_fetched']}</td>"
@@ -54,14 +67,17 @@ def render_page(state: StateStore, config: Config) -> bytes:
     ) or "<tr><td colspan='7' class='empty'>No rounds recorded yet - wait for the next scheduled run.</td></tr>"
 
     trades_rows = "".join(
-        f"<tr><td>{_fmt_ts(t['timestamp'])}</td><td>{_esc(t['market_id'])}</td>"
+        f"<tr><td>{_fmt_ts(t['timestamp'])}</td>"
+        f"<td>{_esc(t['market_question']) if t.get('market_question') else _esc(t['market_id'])}"
+        f"<div class='subtext'>{_esc(t['market_id'])}</div></td>"
         f"<td>{_esc(t['side'])}</td><td>${t['price']:.2f}</td><td>${t['stake_usd']:.2f}</td>"
         f"<td>{t['model_prob']:.2f}</td><td>{t['edge']:.2f}</td>"
         f"<td>{_esc(t['source'] or '?')}</td>"
         f"<td>{_esc(t['bookmakers']) if t.get('bookmakers') else '-'}</td>"
-        f"<td>{'LIVE' if not t['dry_run'] else 'dry-run'}</td></tr>"
+        f"<td>{'LIVE' if not t['dry_run'] else 'dry-run'}</td>"
+        f"<td>{_outcome_cell(t)}</td></tr>"
         for t in trades
-    ) or "<tr><td colspan='10' class='empty'>No bet signals logged yet.</td></tr>"
+    ) or "<tr><td colspan='11' class='empty'>No bet signals logged yet.</td></tr>"
 
     page = f"""<!doctype html>
 <html>
@@ -85,6 +101,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
   .bar-bg {{ background: #2a2e3a; border-radius: 6px; height: 8px; width: 100%; overflow: hidden; margin-top: 10px; }}
   .bar-fill {{ background: #4f8ef7; height: 100%; }}
   .empty {{ color: #6b7280; font-style: italic; }}
+  .subtext {{ color: #6b7280; font-size: 11px; margin-top: 2px; }}
 </style>
 </head>
 <body>
@@ -101,6 +118,17 @@ def render_page(state: StateStore, config: Config) -> bytes:
     </div>
   </div>
 
+  <h2>Profit &amp; loss (realized, once markets settle)</h2>
+  <div class="cards">
+    <div class="card"><div class="label">Today</div><div class="value">{_pnl_span(pnl['daily']['profit_usd'])}</div></div>
+    <div class="card"><div class="label">This week</div><div class="value">{_pnl_span(pnl['weekly']['profit_usd'])}</div></div>
+    <div class="card"><div class="label">This month</div><div class="value">{_pnl_span(pnl['monthly']['profit_usd'])}</div></div>
+    <div class="card"><div class="label">This year</div><div class="value">{_pnl_span(pnl['yearly']['profit_usd'])}</div></div>
+    <div class="card"><div class="label">All time</div><div class="value">{_pnl_span(pnl['all_time']['profit_usd'])}</div></div>
+    <div class="card"><div class="label">Win / loss record</div><div class="value">{pnl['wins']}-{pnl['losses']}</div></div>
+    <div class="card"><div class="label">Pending (unsettled)</div><div class="value">{pnl['pending']['count']} / ${pnl['pending']['stake_usd']:.0f}</div></div>
+  </div>
+
   <h2>Recent rounds (every scheduled run, whether or not it bet)</h2>
   <table>
     <tr><th>Time</th><th>Fetched</th><th>Already held</th><th>No signal</th><th>Signal errors</th><th>Risk-rejected</th><th>Placed</th></tr>
@@ -109,7 +137,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
 
   <h2>Recent bet signals</h2>
   <table>
-    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Bookmakers</th><th>Mode</th></tr>
+    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Bookmakers</th><th>Mode</th><th>Outcome</th></tr>
     {trades_rows}
   </table>
 </body>

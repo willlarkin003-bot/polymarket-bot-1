@@ -20,6 +20,68 @@ def test_record_and_query_trade_with_source(state):
     assert trades[0]["bookmakers"] == "book_a, book_b"
 
 
+def test_record_trade_stores_market_question(state):
+    state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time(),
+              market_question="Will the Lakers win?")
+    )
+    trades = state.recent_trades()
+    assert trades[0]["market_question"] == "Will the Lakers win?"
+    assert trades[0]["settled"] == 0
+
+
+def test_unsettled_trades_excludes_settled_ones(state):
+    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time()))
+    state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time()))
+    unsettled = state.unsettled_trades()
+    assert {t["market_id"] for t in unsettled} == {"m1", "m2"}
+
+    trade_id = next(t["id"] for t in unsettled if t["market_id"] == "m1")
+    state.mark_settled(trade_id, outcome="WON", payout_usd=72.7, profit_usd=32.7, settled_at=time.time())
+
+    unsettled = state.unsettled_trades()
+    assert {t["market_id"] for t in unsettled} == {"m2"}
+
+    settled = next(t for t in state.recent_trades() if t["market_id"] == "m1")
+    assert settled["settled"] == 1
+    assert settled["outcome"] == "WON"
+    assert settled["profit_usd"] == pytest.approx(32.7)
+
+
+def test_pnl_summary_buckets_realized_profit(state):
+    now = time.time()
+    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, now))
+    state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, now))
+    state.record_trade(Trade("m3", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, now))
+
+    ids = {t["market_id"]: t["id"] for t in state.unsettled_trades()}
+    state.mark_settled(ids["m1"], outcome="WON", payout_usd=60.0, profit_usd=20.0, settled_at=now)
+    state.mark_settled(ids["m2"], outcome="LOST", payout_usd=0.0, profit_usd=-40.0, settled_at=now)
+    # m3 stays unsettled - pending
+
+    summary = state.pnl_summary()
+    assert summary["daily"]["profit_usd"] == pytest.approx(-20.0)
+    assert summary["daily"]["settled_count"] == 2
+    assert summary["all_time"]["profit_usd"] == pytest.approx(-20.0)
+    assert summary["wins"] == 1
+    assert summary["losses"] == 1
+    assert summary["pending"]["count"] == 1
+    assert summary["pending"]["stake_usd"] == pytest.approx(40.0)
+
+
+def test_pnl_summary_excludes_trades_settled_before_the_bucket_cutoff(state):
+    now = time.time()
+    three_weeks_ago = now - 21 * 86400
+    state.record_trade(Trade("old", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, three_weeks_ago))
+    trade_id = state.unsettled_trades()[0]["id"]
+    state.mark_settled(trade_id, outcome="WON", payout_usd=60.0, profit_usd=20.0, settled_at=three_weeks_ago)
+
+    summary = state.pnl_summary()
+    assert summary["weekly"]["profit_usd"] == 0.0
+    assert summary["weekly"]["settled_count"] == 0
+    assert summary["all_time"]["profit_usd"] == pytest.approx(20.0)
+
+
 def test_record_and_query_round_summary(state):
     state.record_round(RoundSummary(
         markets_fetched=50, already_held=2, no_signal=45, signal_errors=3, risk_rejected=1, placed=2,
@@ -69,6 +131,41 @@ def test_migrates_db_created_before_source_column_existed(tmp_path):
     store.record_trade(Trade("new-market", "YES", 0.5, 10.0, 0.6, 0.1, "llm", "", True, time.time()))
     trades = store.recent_trades()
     assert {t["market_id"] for t in trades} == {"old-market", "new-market"}
+
+
+def test_migrates_db_created_before_settlement_columns_existed(tmp_path):
+    db_path = str(tmp_path / "old_settlement.db")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE trades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                market_id TEXT NOT NULL,
+                side TEXT NOT NULL,
+                price REAL NOT NULL,
+                stake_usd REAL NOT NULL,
+                model_prob REAL NOT NULL,
+                edge REAL NOT NULL,
+                source TEXT NOT NULL DEFAULT '',
+                bookmakers TEXT NOT NULL DEFAULT '',
+                dry_run INTEGER NOT NULL,
+                timestamp REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO trades (market_id, side, price, stake_usd, model_prob, edge, dry_run, timestamp) "
+            "VALUES ('old-market', 'YES', 0.5, 10.0, 0.6, 0.1, 1, 0.0)"
+        )
+        conn.commit()
+
+    store = StateStore(db_path=db_path)  # should migrate in place, not raise
+    unsettled = store.unsettled_trades()
+    assert len(unsettled) == 1
+    assert unsettled[0]["market_question"] == ""
+
+    summary = store.pnl_summary()
+    assert summary["pending"]["count"] == 1
 
 
 def test_migrates_rounds_table_created_before_signal_errors_column_existed(tmp_path):

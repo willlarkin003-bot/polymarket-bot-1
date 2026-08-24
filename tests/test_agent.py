@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 import src.agent as agent_module
 from src.config import Config
 from src.sports_markets import SportsMarket
@@ -121,3 +123,51 @@ def test_odds_events_are_cached_across_rounds_within_ttl(monkeypatch, tmp_path):
     fake_now[0] += 2000  # advance past the TTL
     agent.run_once()
     assert call_count["n"] == 2, "odds should be re-fetched once the cache entry expires"
+
+
+def test_settled_market_records_realized_pnl(monkeypatch, tmp_path, caplog):
+    db_path = str(tmp_path / "state.db")
+    monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
+    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client: [])
+
+    agent = agent_module.TradingAgent(_config())
+    agent.state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, 0.0,
+              market_question="Will the Lakers win?")
+    )
+
+    class FakeMarkets:
+        def settlement(self, slug):
+            return {"marketSlug": slug, "settlementPrice": {"value": "1.0", "currency": "USD"}, "settledAt": "x"}
+
+    agent.polymarket.markets = FakeMarkets()
+
+    with caplog.at_level(logging.INFO):
+        agent.run_once()
+
+    trades = agent.state.recent_trades()
+    assert trades[0]["settled"] == 1
+    assert trades[0]["outcome"] == "WON"
+    assert trades[0]["profit_usd"] == pytest.approx(40.0)  # $40 at price 0.5 -> $80 payout, $40 profit
+
+    summary = next(r.message for r in caplog.records if "Settled" in r.message and "trade(s)" in r.message)
+    assert "1 trade(s)" in summary
+
+
+def test_unresolved_market_stays_pending(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "state.db")
+    monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
+    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client: [])
+
+    agent = agent_module.TradingAgent(_config())
+    agent.state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, 0.0))
+
+    class FakeMarkets:
+        def settlement(self, slug):
+            raise Exception("market has not settled yet")
+
+    agent.polymarket.markets = FakeMarkets()
+    agent.run_once()
+
+    trades = agent.state.recent_trades()
+    assert trades[0]["settled"] == 0

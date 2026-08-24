@@ -10,6 +10,7 @@ from src.odds_provider import fetch_events
 from src.polymarket_client import PolymarketClient
 from src.risk_manager import RiskManager
 from src.signal_engine import SignalEngine
+from src.settlement import settle_trade
 from src.sport_keys import guess_sport_key
 from src.sports_markets import SportsMarket, fetch_open_sports_markets
 from src.state_store import RoundSummary, StateStore, Trade
@@ -31,6 +32,38 @@ class TradingAgent:
         self.client = PolymarketClient(config, self.polymarket)
         self._odds_cache = {}  # sport_key -> (fetched_at, events) - persists across rounds, see _events_for_sport
         self._signal_errors = 0
+
+    def _check_settlements(self) -> int:
+        """Check every unsettled trade's market for a resolution and record its
+        realized P&L. Runs regardless of DRY_RUN - a dry-run trade's stake was
+        never actually risked, but checking what it *would have* earned is the
+        whole point of dry-run testing. A market that hasn't resolved yet just
+        raises/returns nothing useful here, so failures are silently skipped and
+        retried next round rather than treated as an error."""
+        settled_count = 0
+        for trade in self.state.unsettled_trades():
+            try:
+                settlement = self.polymarket.markets.settlement(trade["market_id"])
+                settlement_price = float(settlement["settlementPrice"]["value"])
+            except Exception:
+                continue
+
+            result = settle_trade(
+                side=trade["side"], entry_price=trade["price"],
+                stake_usd=trade["stake_usd"], settlement_price=settlement_price,
+            )
+            self.state.mark_settled(
+                trade_id=trade["id"], outcome=result.outcome,
+                payout_usd=result.payout_usd, profit_usd=result.profit_usd,
+                settled_at=time.time(),
+            )
+            settled_count += 1
+            logger.info(
+                "Settled %s on %r: %s, profit=$%.2f",
+                trade["side"], trade["market_question"] or trade["market_id"],
+                result.outcome, result.profit_usd,
+            )
+        return settled_count
 
     def _events_for_sport(self, sport_key: str) -> list:
         """Cross-round cached: The Odds API's free tier is 500 requests/month,
@@ -87,6 +120,10 @@ class TradingAgent:
         return None, None, []
 
     def run_once(self) -> None:
+        settled = self._check_settlements()
+        if settled:
+            logger.info("Settled %d trade(s) this round", settled)
+
         markets = fetch_open_sports_markets(self.polymarket)
         logger.info("Fetched %d open sports markets", len(markets))
         self._signal_errors = 0
@@ -146,6 +183,7 @@ class TradingAgent:
                     bookmakers=", ".join(bookmakers),
                     dry_run=self.config.dry_run,
                     timestamp=time.time(),
+                    market_question=market.question,
                 )
             )
             placed += 1

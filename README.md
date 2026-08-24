@@ -173,6 +173,24 @@ whose lines the edge came from.
 page at `http://localhost:8765` showing recent rounds, bet signals, and weekly bankroll usage.
 It only reads `agent_state.db`, so it's safe to leave running alongside the agent.
 
+Each bet signal shows the market's actual question (e.g. "Will the Lakers win?"), not just its
+Polymarket slug — the slug is still shown underneath in small text for reference/debugging.
+
+### Profit & loss tracking
+
+Every round, before looking for new bets, the agent checks each of its still-open positions
+against `client.markets.settlement(slug)` (`src/agent.py:_check_settlements`). Once a market has
+resolved, it computes the realized payout and profit (`src/settlement.py`) and records it —
+the dashboard's "Recent bet signals" table then shows `WON +$12.34` / `LOST -$25.00` instead of
+`pending`, and the "Profit & loss" cards roll settled trades up into today / this week / this
+month / this year / all-time totals plus a win-loss record.
+
+This runs the same way in `DRY_RUN` mode — a dry-run trade never risked real money, but checking
+what it *would have* earned against the market's actual resolution is the whole point of testing
+in dry-run first. Settlement is checked every round regardless of whether new markets are being
+scanned, so P&L keeps updating even for old positions the agent isn't actively trading around
+anymore. A market that hasn't resolved yet just stays "pending" and gets rechecked next round.
+
 ### View from your phone (public URL)
 
 The dashboard only binds to `127.0.0.1` — it isn't reachable from outside your PC by default.
