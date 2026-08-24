@@ -108,16 +108,6 @@ def render_page(state: StateStore, config: Config) -> bytes:
   <h1>Polymarket Sports Trading Agent<span class="badge">{mode}</span></h1>
   <div class="sub">Auto-refreshes every 30s &middot; Last loaded {now}</div>
 
-  <div class="cards">
-    <div class="card"><div class="label">Rounds logged</div><div class="value">{len(rounds)}</div></div>
-    <div class="card"><div class="label">Bet signals logged</div><div class="value">{len(trades)}</div></div>
-    <div class="card" style="min-width:220px">
-      <div class="label">Weekly bankroll used</div>
-      <div class="value">${weekly_spent:.2f} / ${config.bankroll_usd:.0f}</div>
-      <div class="bar-bg"><div class="bar-fill" style="width:{weekly_pct:.0f}%"></div></div>
-    </div>
-  </div>
-
   <h2>Profit &amp; loss (realized, once markets settle)</h2>
   <div class="cards">
     <div class="card"><div class="label">Today</div><div class="value">{_pnl_span(pnl['daily']['profit_usd'])}</div></div>
@@ -129,16 +119,26 @@ def render_page(state: StateStore, config: Config) -> bytes:
     <div class="card"><div class="label">Pending (unsettled)</div><div class="value">{pnl['pending']['count']} / ${pnl['pending']['stake_usd']:.0f}</div></div>
   </div>
 
-  <h2>Recent rounds (every scheduled run, whether or not it bet)</h2>
-  <table>
-    <tr><th>Time</th><th>Fetched</th><th>Already held</th><th>No signal</th><th>Signal errors</th><th>Risk-rejected</th><th>Placed</th></tr>
-    {rounds_rows}
-  </table>
-
   <h2>Recent bet signals</h2>
   <table>
     <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Bookmakers</th><th>Mode</th><th>Outcome</th></tr>
     {trades_rows}
+  </table>
+
+  <div class="cards">
+    <div class="card"><div class="label">Rounds logged</div><div class="value">{len(rounds)}</div></div>
+    <div class="card"><div class="label">Bet signals logged</div><div class="value">{len(trades)}</div></div>
+    <div class="card" style="min-width:220px">
+      <div class="label">Weekly bankroll used</div>
+      <div class="value">${weekly_spent:.2f} / ${config.bankroll_usd:.0f}</div>
+      <div class="bar-bg"><div class="bar-fill" style="width:{weekly_pct:.0f}%"></div></div>
+    </div>
+  </div>
+
+  <h2>Recent rounds (every scheduled run, whether or not it bet)</h2>
+  <table>
+    <tr><th>Time</th><th>Fetched</th><th>Already held</th><th>No signal</th><th>Signal errors</th><th>Risk-rejected</th><th>Placed</th></tr>
+    {rounds_rows}
   </table>
 </body>
 </html>"""
