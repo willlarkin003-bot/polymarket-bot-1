@@ -54,7 +54,7 @@ class Config:
             bankroll_usd=_float_env("BANKROLL_USD", 1000.0),
             kelly_multiplier=_float_env("KELLY_MULTIPLIER", 0.5),
             max_position_pct=_float_env("MAX_POSITION_PCT", 0.05),
-            max_open_positions=_int_env("MAX_OPEN_POSITIONS", 10),
+            max_open_positions=_int_env("MAX_OPEN_POSITIONS", 25),
             min_edge=_float_env("MIN_EDGE", 0.04),
             min_bookmakers=_int_env("MIN_BOOKMAKERS", 3),
             match_confidence=_float_env("MATCH_CONFIDENCE", 0.6),

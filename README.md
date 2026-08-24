@@ -120,10 +120,10 @@ market slots (`MAX_OPEN_POSITIONS`).
 
 **Note the two caps interact:** the most the agent can ever stake in one week is
 `min(BANKROLL_USD, MAX_OPEN_POSITIONS × MAX_POSITION_PCT × BANKROLL_USD)`. With the defaults
-above (10 positions × 5% of a $500 bankroll = $25/bet), that ceiling is `10 × $25 = $250` — half
-the bankroll goes unused even in a week with plenty of good signals, purely because of the
-position-count cap. Raise `MAX_OPEN_POSITIONS` and/or `MAX_POSITION_PCT` if you want it able to
-use more of `BANKROLL_USD` in a strong week.
+above (25 positions × 5% of a $500 bankroll = $25/bet), that ceiling is `25 × $25 = $625`, above
+`BANKROLL_USD`, so `BANKROLL_USD` itself is the binding cap — the full $500 is reachable in a
+week with enough good signals. Raise `MAX_OPEN_POSITIONS` and/or `MAX_POSITION_PCT` further if
+you raise `BANKROLL_USD` and want the position cap to keep pace with it.
 
 ## Value bets via sportsbook cross-referencing
 
