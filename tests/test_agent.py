@@ -31,7 +31,7 @@ def test_logs_round_summary_with_skip_reasons(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
     monkeypatch.setattr(
         agent_module, "fetch_open_sports_markets",
-        lambda client: [_market("m1"), _market("m2")],
+        lambda client, **kwargs: [_market("m1"), _market("m2")],
     )
 
     agent = agent_module.TradingAgent(_config())
@@ -50,7 +50,7 @@ def test_summary_counts_already_held_markets(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
     monkeypatch.setattr(
         agent_module, "fetch_open_sports_markets",
-        lambda client: [_market("m1")],
+        lambda client, **kwargs: [_market("m1")],
     )
 
     agent = agent_module.TradingAgent(_config())
@@ -71,7 +71,7 @@ def test_signal_engine_errors_are_tracked_separately_from_no_signal(monkeypatch,
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
     monkeypatch.setattr(
         agent_module, "fetch_open_sports_markets",
-        lambda client: [_market("m1")],
+        lambda client, **kwargs: [_market("m1")],
     )
 
     class FailingSignalEngine:
@@ -101,7 +101,7 @@ def test_odds_events_are_cached_across_rounds_within_ttl(monkeypatch, tmp_path):
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
     monkeypatch.setattr(
         agent_module, "fetch_open_sports_markets",
-        lambda client: [_market("nba-m1", question="Will the Lakers win the NBA game tonight?")],
+        lambda client, **kwargs: [_market("nba-m1", question="Will the Lakers win the NBA game tonight?")],
     )
 
     call_count = {"n": 0}
@@ -129,7 +129,7 @@ def test_odds_events_are_cached_across_rounds_within_ttl(monkeypatch, tmp_path):
 def test_settled_market_records_realized_pnl(monkeypatch, tmp_path, caplog):
     db_path = str(tmp_path / "state.db")
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
-    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client: [])
+    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client, **kwargs: [])
 
     agent = agent_module.TradingAgent(_config())
     agent.state.record_trade(
@@ -164,7 +164,7 @@ def test_near_term_markets_win_position_slots_over_long_dated_ones(monkeypatch, 
     soon_market = _market("soon", question="Tonight's game", resolves_at=now + 2 * 86400)
     # Fetched with the long-dated one first, to prove sorting decides the outcome, not luck.
     monkeypatch.setattr(
-        agent_module, "fetch_open_sports_markets", lambda client: [far_market, soon_market]
+        agent_module, "fetch_open_sports_markets", lambda client, **kwargs: [far_market, soon_market]
     )
 
     class FakeSignalEngine:
@@ -190,7 +190,7 @@ def test_near_term_markets_win_position_slots_over_long_dated_ones(monkeypatch, 
 def test_unresolved_market_stays_pending(monkeypatch, tmp_path):
     db_path = str(tmp_path / "state.db")
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
-    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client: [])
+    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client, **kwargs: [])
 
     agent = agent_module.TradingAgent(_config())
     agent.state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, 0.0))

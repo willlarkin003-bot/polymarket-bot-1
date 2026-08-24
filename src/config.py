@@ -43,6 +43,7 @@ class Config:
     dashboard_password: str = ""
     near_term_window_days: float = 9.0
     max_long_dated_positions: int = 5
+    market_fetch_limit: int = 150
 
     @staticmethod
     def load() -> "Config":
@@ -57,7 +58,7 @@ class Config:
             kelly_multiplier=_float_env("KELLY_MULTIPLIER", 0.5),
             max_position_pct=_float_env("MAX_POSITION_PCT", 0.05),
             max_open_positions=_int_env("MAX_OPEN_POSITIONS", 25),
-            min_edge=_float_env("MIN_EDGE", 0.04),
+            min_edge=_float_env("MIN_EDGE", 0.025),
             min_bookmakers=_int_env("MIN_BOOKMAKERS", 3),
             match_confidence=_float_env("MATCH_CONFIDENCE", 0.6),
             dry_run=_bool_env("DRY_RUN", True),
@@ -65,6 +66,7 @@ class Config:
             dashboard_password=os.getenv("DASHBOARD_PASSWORD", ""),
             near_term_window_days=_float_env("NEAR_TERM_WINDOW_DAYS", 9.0),
             max_long_dated_positions=_int_env("MAX_LONG_DATED_POSITIONS", 5),
+            market_fetch_limit=_int_env("MARKET_FETCH_LIMIT", 150),
         )
 
     def require_live_credentials(self) -> None:

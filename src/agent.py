@@ -124,7 +124,7 @@ class TradingAgent:
         if settled:
             logger.info("Settled %d trade(s) this round", settled)
 
-        markets = fetch_open_sports_markets(self.polymarket)
+        markets = fetch_open_sports_markets(self.polymarket, limit=self.config.market_fetch_limit)
         # Near-term markets get first claim on the weekly position budget, so
         # long-dated futures don't crowd out games resolving soon - see
         # RiskManager.check's max_long_dated_positions cap for the other half

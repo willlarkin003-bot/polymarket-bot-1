@@ -73,6 +73,8 @@ Required environment variables (see `.env.example`):
 | `MIN_BOOKMAKERS` | Minimum number of books that must quote both sides of a game before its consensus is trusted (default 3). |
 | `MATCH_CONFIDENCE` | Minimum text-match confidence (0–1) to link a Polymarket market to a sportsbook game (default 0.6). |
 | `BANKROLL_USD` | **Weekly** budget. Kelly sizing is computed against it, and once total stakes since Monday 00:00 UTC reach this amount, the agent stops opening new positions until the next Monday, when the count resets. |
+| `MIN_EDGE` | Minimum model-vs-market edge required to bet at all (default 0.025 = 2.5%). Lower finds more bets, each on a thinner edge. |
+| `MARKET_FETCH_LIMIT` | How many open markets to scan per round, ranked by volume (default 150). Raising this looks at more games without changing how selective `MIN_EDGE`/`MIN_BOOKMAKERS` are. |
 | `DRY_RUN` | `true` (default) logs intended trades without submitting orders. Set `false` to trade live. |
 
 ## Run
