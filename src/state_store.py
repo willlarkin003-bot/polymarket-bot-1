@@ -165,8 +165,17 @@ class StateStore:
             return [dict(row) for row in rows]
 
     def open_position_count(self) -> int:
+        """Distinct markets bet on since the current calendar week began (Monday
+        00:00 UTC) - mirrors the weekly bankroll reset. Without this cutoff, this
+        count only ever grows (nothing here tracks market settlement to free up a
+        slot), so MAX_OPEN_POSITIONS would act as a one-time lifetime cap instead
+        of a per-week one, permanently freezing new bets once it's ever been hit."""
+        cutoff = _current_week_start_ts()
         with closing(self._connect()) as conn:
-            row = conn.execute("SELECT COUNT(DISTINCT market_id) FROM trades").fetchone()
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT market_id) FROM trades WHERE timestamp >= ?",
+                (cutoff,),
+            ).fetchone()
             return row[0] if row else 0
 
     def spent_this_week_usd(self) -> float:

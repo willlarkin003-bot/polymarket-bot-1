@@ -112,6 +112,19 @@ simply stops opening positions — existing open positions are untouched — unt
 when the sum naturally resets to zero. There's no separate "top up" step in code: if you're
 adding fresh USDC to the wallet each week, just make sure it's there before Monday's reset.
 
+`MAX_OPEN_POSITIONS` resets on the same Monday 00:00 UTC boundary, for the same reason: nothing
+in this codebase tracks when a market settles, so without a weekly cutoff the count of distinct
+markets ever bet on would only grow, and once it hit `MAX_OPEN_POSITIONS` the agent would stop
+placing new bets permanently. Each week gets a fresh budget of both dollars (`BANKROLL_USD`) and
+market slots (`MAX_OPEN_POSITIONS`).
+
+**Note the two caps interact:** the most the agent can ever stake in one week is
+`min(BANKROLL_USD, MAX_OPEN_POSITIONS × MAX_POSITION_PCT × BANKROLL_USD)`. With the defaults
+above (10 positions × 5% of a $500 bankroll = $25/bet), that ceiling is `10 × $25 = $250` — half
+the bankroll goes unused even in a week with plenty of good signals, purely because of the
+position-count cap. Raise `MAX_OPEN_POSITIONS` and/or `MAX_POSITION_PCT` if you want it able to
+use more of `BANKROLL_USD` in a strong week.
+
 ## Value bets via sportsbook cross-referencing
 
 For each open Polymarket sports market, `agent.py` (`_estimate_probability`) does this:

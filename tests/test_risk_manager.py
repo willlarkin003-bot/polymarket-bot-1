@@ -65,10 +65,20 @@ def test_rejects_duplicate_market(config, state):
 def test_rejects_when_max_open_positions_reached(config, state):
     from src.state_store import Trade
     risk = RiskManager(config, state)
-    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, 0.0))
-    state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, 0.0))
+    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, time.time()))
+    state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, time.time()))
     check = risk.check("m3", make_decision())
     assert not check.approved
+
+
+def test_max_open_positions_resets_for_positions_from_prior_weeks(config, state):
+    from src.state_store import Trade
+    risk = RiskManager(config, state)
+    three_weeks_ago = time.time() - 21 * 86400
+    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, three_weeks_ago))
+    state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, three_weeks_ago))
+    check = risk.check("m3", make_decision())
+    assert check.approved, "positions from prior weeks shouldn't count toward this week's max_open_positions"
 
 
 def test_rejects_when_weekly_bankroll_exhausted(config, state):
