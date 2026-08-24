@@ -1,13 +1,14 @@
 import os
 import tempfile
 import time
+from dataclasses import replace
 
 import pytest
 
 from src.config import Config
 from src.kelly import BetDecision
 from src.risk_manager import RiskManager
-from src.state_store import StateStore
+from src.state_store import StateStore, Trade
 
 
 @pytest.fixture
@@ -96,4 +97,54 @@ def test_weekly_bankroll_resets_for_trades_from_prior_weeks(config, state):
     three_weeks_ago = time.time() - 21 * 86400
     state.record_trade(Trade("m1", "YES", 0.5, 980.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, three_weeks_ago))
     check = risk.check("m2", make_decision(stake_usd=40.0))
+    assert check.approved
+
+
+def test_rejects_long_dated_bet_once_long_dated_cap_reached(config, state):
+    config = replace(config, max_open_positions=10, max_long_dated_positions=1, near_term_window_days=9)
+    risk = RiskManager(config, state)
+    far_future = time.time() + 60 * 86400  # 60 days out - long-dated
+    state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time(),
+              resolves_at=far_future)
+    )
+    check = risk.check("m2", make_decision(), resolves_at=far_future)
+    assert not check.approved
+    assert "long_dated" in check.reason
+
+
+def test_near_term_bet_not_blocked_by_long_dated_cap(config, state):
+    config = replace(config, max_open_positions=10, max_long_dated_positions=1, near_term_window_days=9)
+    risk = RiskManager(config, state)
+    far_future = time.time() + 60 * 86400
+    state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time(),
+              resolves_at=far_future)
+    )
+    soon = time.time() + 2 * 86400  # 2 days out - well within the 9-day window
+    check = risk.check("m2", make_decision(), resolves_at=soon)
+    assert check.approved
+
+
+def test_unknown_resolves_at_counts_as_long_dated(config, state):
+    config = replace(config, max_open_positions=10, max_long_dated_positions=1, near_term_window_days=9)
+    risk = RiskManager(config, state)
+    state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time(), resolves_at=0.0)
+    )
+    check = risk.check("m2", make_decision(), resolves_at=None)
+    assert not check.approved
+    assert "long_dated" in check.reason
+
+
+def test_long_dated_cap_resets_for_positions_from_prior_weeks(config, state):
+    config = replace(config, max_open_positions=10, max_long_dated_positions=1, near_term_window_days=9)
+    risk = RiskManager(config, state)
+    three_weeks_ago = time.time() - 21 * 86400
+    far_future = time.time() + 60 * 86400
+    state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, three_weeks_ago,
+              resolves_at=far_future)
+    )
+    check = risk.check("m2", make_decision(), resolves_at=far_future)
     assert check.approved

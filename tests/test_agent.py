@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 
@@ -20,9 +21,9 @@ def _config(**overrides):
     return Config(**base)
 
 
-def _market(slug, question="Will X win?"):
+def _market(slug, question="Will X win?", resolves_at=None):
     return SportsMarket(market_id=slug, question=question, description="",
-                         yes_price=0.5, outcome_labels=["X"])
+                         yes_price=0.5, outcome_labels=["X"], resolves_at=resolves_at)
 
 
 def test_logs_round_summary_with_skip_reasons(monkeypatch, tmp_path, caplog):
@@ -152,6 +153,38 @@ def test_settled_market_records_realized_pnl(monkeypatch, tmp_path, caplog):
 
     summary = next(r.message for r in caplog.records if "Settled" in r.message and "trade(s)" in r.message)
     assert "1 trade(s)" in summary
+
+
+def test_near_term_markets_win_position_slots_over_long_dated_ones(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "state.db")
+    monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
+
+    now = time.time()
+    far_market = _market("far", question="Season MVP", resolves_at=now + 60 * 86400)
+    soon_market = _market("soon", question="Tonight's game", resolves_at=now + 2 * 86400)
+    # Fetched with the long-dated one first, to prove sorting decides the outcome, not luck.
+    monkeypatch.setattr(
+        agent_module, "fetch_open_sports_markets", lambda client: [far_market, soon_market]
+    )
+
+    class FakeSignalEngine:
+        def __init__(self, *a, **kw):
+            pass
+
+        def estimate_probability(self, **kwargs):
+            return 0.7  # comfortably above min_edge for both markets
+
+    monkeypatch.setattr(agent_module, "SignalEngine", FakeSignalEngine)
+
+    agent = agent_module.TradingAgent(_config(
+        anthropic_api_key="sk-ant-fake", max_open_positions=10,
+        max_long_dated_positions=0, near_term_window_days=9,
+    ))
+
+    agent.run_once()
+
+    trades = {t["market_id"] for t in agent.state.recent_trades()}
+    assert trades == {"soon"}, "only the near-term market should get a slot when max_long_dated_positions=0"
 
 
 def test_unresolved_market_stays_pending(monkeypatch, tmp_path):

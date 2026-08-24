@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from polymarket_us import PolymarketUS
@@ -11,6 +12,28 @@ class SportsMarket:
     description: str
     yes_price: float  # market-implied probability of the LONG (yes) side, see _extract_yes_price
     outcome_labels: List[str]  # [team/outcome name this market's LONG side represents]
+    resolves_at: Optional[float] = None  # market's endDate as a Unix timestamp, None if unknown
+
+
+def _parse_iso_ts(value: Optional[str]) -> Optional[float]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _build_question(m: dict) -> str:
+    """Polymarket's `title` field is often just a short label (a player or team
+    name, e.g. "Bobby Witt Jr."), not a real question - the actual category
+    ("American League MVP") lives in a separate `question` field. Combine both
+    when they differ so the result is actually readable on its own."""
+    title = (m.get("title") or "").strip()
+    api_question = (m.get("question") or "").strip()
+    if title and api_question and title != api_question:
+        return f"{title} — {api_question}"
+    return title or api_question or (m.get("titleShort") or "").strip()
 
 
 def _amount(value) -> Optional[float]:
@@ -91,10 +114,11 @@ def fetch_open_sports_markets(client: PolymarketUS, limit: int = 50) -> List[Spo
         markets.append(
             SportsMarket(
                 market_id=slug,
-                question=m.get("title", ""),
+                question=_build_question(m),
                 description=m.get("description", ""),
                 yes_price=yes_price,
                 outcome_labels=[outcome_label],
+                resolves_at=_parse_iso_ts(m.get("endDate")),
             )
         )
 

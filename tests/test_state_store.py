@@ -82,6 +82,43 @@ def test_pnl_summary_excludes_trades_settled_before_the_bucket_cutoff(state):
     assert summary["all_time"]["profit_usd"] == pytest.approx(20.0)
 
 
+def test_record_trade_stores_resolves_at(state):
+    resolves_at = time.time() + 30 * 86400
+    state.record_trade(
+        Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, time.time(),
+              resolves_at=resolves_at)
+    )
+    trades = state.recent_trades()
+    assert trades[0]["resolves_at"] == pytest.approx(resolves_at)
+
+
+def test_long_dated_position_count_counts_far_out_and_unknown_dates(state):
+    now = time.time()
+    near_term_cutoff = now + 9 * 86400
+    state.record_trade(
+        Trade("far", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, now,
+              resolves_at=now + 60 * 86400)  # long-dated
+    )
+    state.record_trade(
+        Trade("unknown", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, now, resolves_at=0.0)
+    )
+    state.record_trade(
+        Trade("soon", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, now,
+              resolves_at=now + 2 * 86400)  # near-term
+    )
+    assert state.long_dated_position_count(near_term_cutoff) == 2
+
+
+def test_long_dated_position_count_resets_for_positions_from_prior_weeks(state):
+    three_weeks_ago = time.time() - 21 * 86400
+    near_term_cutoff = time.time() + 9 * 86400
+    state.record_trade(
+        Trade("old-far", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "", True, three_weeks_ago,
+              resolves_at=time.time() + 60 * 86400)
+    )
+    assert state.long_dated_position_count(near_term_cutoff) == 0
+
+
 def test_record_and_query_round_summary(state):
     state.record_round(RoundSummary(
         markets_fetched=50, already_held=2, no_signal=45, signal_errors=3, risk_rejected=1, placed=2,
@@ -163,9 +200,13 @@ def test_migrates_db_created_before_settlement_columns_existed(tmp_path):
     unsettled = store.unsettled_trades()
     assert len(unsettled) == 1
     assert unsettled[0]["market_question"] == ""
+    assert unsettled[0]["resolves_at"] == 0
 
     summary = store.pnl_summary()
     assert summary["pending"]["count"] == 1
+    # the migrated row's timestamp is 0.0 (epoch), so it's outside "this week" and
+    # doesn't count - this just confirms the migration didn't crash the query.
+    assert store.long_dated_position_count(time.time() + 9 * 86400) == 0
 
 
 def test_migrates_rounds_table_created_before_signal_errors_column_existed(tmp_path):

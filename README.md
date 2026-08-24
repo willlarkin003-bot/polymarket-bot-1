@@ -125,6 +125,21 @@ above (25 positions × 5% of a $500 bankroll = $25/bet), that ceiling is `25 × 
 week with enough good signals. Raise `MAX_OPEN_POSITIONS` and/or `MAX_POSITION_PCT` further if
 you raise `BANKROLL_USD` and want the position cap to keep pace with it.
 
+### Near-term markets get priority over long-dated futures
+
+Polymarket's sports category mixes actively-traded near-term games with season-long futures
+(MVP races, championship winners) that don't resolve for months. Left alone, high-edge futures
+can quietly eat most of the weekly position budget while paying out nothing for a long time.
+
+Each round, `agent.py` sorts fetched markets by `resolves_at` (parsed from Polymarket's `endDate`
+field) before evaluating them, soonest-resolving first, so near-term games get first claim on
+the week's `MAX_OPEN_POSITIONS` slots. `RiskManager` backs this with a hard sub-cap,
+`MAX_LONG_DATED_POSITIONS` (default 5): once that many of this week's positions resolve outside
+`NEAR_TERM_WINDOW_DAYS` (default 9 - a week plus a couple days' grace), every further long-dated
+signal is rejected regardless of edge, reserving the rest of `MAX_OPEN_POSITIONS` for markets
+resolving soon. A market with no parseable `endDate` counts as long-dated too, on the
+conservative assumption that an unknown resolution date could be far out.
+
 ## Value bets via sportsbook cross-referencing
 
 For each open Polymarket sports market, `agent.py` (`_estimate_probability`) does this:
@@ -173,8 +188,13 @@ whose lines the edge came from.
 page at `http://localhost:8765` showing recent rounds, bet signals, and weekly bankroll usage.
 It only reads `agent_state.db`, so it's safe to leave running alongside the agent.
 
-Each bet signal shows the market's actual question (e.g. "Will the Lakers win?"), not just its
-Polymarket slug — the slug is still shown underneath in small text for reference/debugging.
+Each bet signal shows the market's actual question, not just its Polymarket slug — the slug is
+still shown underneath in small text for reference/debugging. (Polymarket's own `title` field is
+often just a short label like a player name rather than a real question - `sports_markets.py`
+combines it with the separate `question` field when they differ, e.g. "Bobby Witt Jr. — American
+League MVP".) A "Finishes" column shows each bet's resolution date from the market's `endDate`,
+highlighted when it falls inside `NEAR_TERM_WINDOW_DAYS` (see "Near-term markets get priority"
+above) - trades placed before this was added just show "unknown".
 
 ### Profit & loss tracking
 

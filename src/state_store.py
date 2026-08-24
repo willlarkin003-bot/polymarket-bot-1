@@ -42,6 +42,7 @@ class Trade:
     dry_run: bool
     timestamp: float
     market_question: str = ""  # human-readable market title, e.g. "Will the Lakers win?"
+    resolves_at: float = 0.0  # market's endDate as a Unix timestamp, 0 if unknown
 
 
 @dataclass(frozen=True)
@@ -84,7 +85,8 @@ class StateStore:
                     outcome TEXT NOT NULL DEFAULT '',
                     payout_usd REAL NOT NULL DEFAULT 0,
                     profit_usd REAL NOT NULL DEFAULT 0,
-                    settled_at REAL NOT NULL DEFAULT 0
+                    settled_at REAL NOT NULL DEFAULT 0,
+                    resolves_at REAL NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -106,6 +108,8 @@ class StateStore:
                 conn.execute("ALTER TABLE trades ADD COLUMN profit_usd REAL NOT NULL DEFAULT 0")
             if "settled_at" not in existing_cols:
                 conn.execute("ALTER TABLE trades ADD COLUMN settled_at REAL NOT NULL DEFAULT 0")
+            if "resolves_at" not in existing_cols:
+                conn.execute("ALTER TABLE trades ADD COLUMN resolves_at REAL NOT NULL DEFAULT 0")
 
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_trades_market_id ON trades(market_id)"
@@ -144,8 +148,8 @@ class StateStore:
             conn.execute(
                 """
                 INSERT INTO trades
-                    (market_id, side, price, stake_usd, model_prob, edge, source, bookmakers, dry_run, timestamp, market_question)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (market_id, side, price, stake_usd, model_prob, edge, source, bookmakers, dry_run, timestamp, market_question, resolves_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     trade.market_id,
@@ -159,6 +163,7 @@ class StateStore:
                     int(trade.dry_run),
                     trade.timestamp,
                     trade.market_question,
+                    trade.resolves_at,
                 ),
             )
             conn.commit()
@@ -210,6 +215,21 @@ class StateStore:
             row = conn.execute(
                 "SELECT COUNT(DISTINCT market_id) FROM trades WHERE timestamp >= ?",
                 (cutoff,),
+            ).fetchone()
+            return row[0] if row else 0
+
+    def long_dated_position_count(self, near_term_cutoff: float) -> int:
+        """Distinct markets bet on this week whose market resolves after
+        `near_term_cutoff` - or has no known resolution date at all, treated
+        conservatively as long-dated. Subset of open_position_count that
+        MAX_LONG_DATED_POSITIONS caps, reserving the rest of the weekly
+        position budget for markets resolving soon."""
+        week_cutoff = _current_week_start_ts()
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT market_id) FROM trades "
+                "WHERE timestamp >= ? AND (resolves_at = 0 OR resolves_at > ?)",
+                (week_cutoff, near_term_cutoff),
             ).fetchone()
             return row[0] if row else 0
 

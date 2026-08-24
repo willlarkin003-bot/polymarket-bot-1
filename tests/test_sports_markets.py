@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -139,6 +140,44 @@ def test_skips_markets_missing_a_slug():
 def test_skips_markets_when_bbo_call_raises():
     client = _fake_client([_market("errors-out")], {})  # bbo_by_slug has no entry -> KeyError raised
     assert fetch_open_sports_markets(client) == []
+
+
+def test_parses_end_date_into_resolves_at():
+    markets = [{**_market("mvp-market"), "endDate": "2026-12-11T23:00:00Z"}]
+    bbo = {"mvp-market": _bbo(longQuote=_amount("0.03"))}
+    client = _fake_client(markets, bbo)
+    result = fetch_open_sports_markets(client)
+    assert result[0].resolves_at == pytest.approx(
+        datetime(2026, 12, 11, 23, 0, 0, tzinfo=timezone.utc).timestamp()
+    )
+
+
+def test_missing_end_date_leaves_resolves_at_none():
+    bbo = {"chiefs-super-bowl": _bbo(longQuote=_amount("0.55"))}
+    client = _fake_client([_market("chiefs-super-bowl")], bbo)
+    result = fetch_open_sports_markets(client)
+    assert result[0].resolves_at is None
+
+
+def test_combines_title_and_question_fields_when_they_differ():
+    # Real shape from a live futures market: `title` is just a short label (a
+    # player name), `question` holds the actual category - neither alone is a
+    # readable description on its own.
+    markets = [{
+        "slug": "mvp-market", "title": "Bobby Witt Jr.", "question": "American League MVP",
+        "description": "", "outcome": "Yes", "active": True, "closed": False,
+    }]
+    bbo = {"mvp-market": _bbo(longQuote=_amount("0.03"))}
+    client = _fake_client(markets, bbo)
+    result = fetch_open_sports_markets(client)
+    assert result[0].question == "Bobby Witt Jr. — American League MVP"
+
+
+def test_uses_title_alone_when_question_field_is_missing():
+    bbo = {"chiefs-super-bowl": _bbo(longQuote=_amount("0.55"))}
+    client = _fake_client([_market("chiefs-super-bowl", title="Will the Chiefs win?")], bbo)
+    result = fetch_open_sports_markets(client)
+    assert result[0].question == "Will the Chiefs win?"
 
 
 def test_sorts_by_volume_descending_to_surface_liquid_markets():

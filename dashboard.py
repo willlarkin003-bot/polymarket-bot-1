@@ -14,6 +14,7 @@ import hmac
 import html
 import http.server
 import socketserver
+import time
 from datetime import datetime
 
 from src.config import Config
@@ -57,6 +58,19 @@ def _market_cell(t: dict) -> str:
     )
 
 
+def _finishes_cell(t: dict) -> str:
+    resolves_at = t.get("resolves_at")
+    if not resolves_at:
+        return '<span class="empty">unknown</span>'
+    days_left = (resolves_at - time.time()) / 86400
+    label = datetime.fromtimestamp(resolves_at).strftime("%m/%d")
+    if days_left < 0:
+        return f"{label} <span class='subtext'>(past due)</span>"
+    if days_left <= 9:
+        return f"{label} <span style='color:#3fb950'>(soon)</span>"
+    return f"{label} <span style='color:#9aa0a6'>({days_left:.0f}d)</span>"
+
+
 def render_page(state: StateStore, config: Config) -> bytes:
     trades = state.recent_trades(50)
     rounds = state.recent_rounds(50)
@@ -83,9 +97,10 @@ def render_page(state: StateStore, config: Config) -> bytes:
         f"<td>{_esc(t['source'] or '?')}</td>"
         f"<td>{_esc(t['bookmakers']) if t.get('bookmakers') else '-'}</td>"
         f"<td>{'LIVE' if not t['dry_run'] else 'dry-run'}</td>"
-        f"<td>{_outcome_cell(t)}</td></tr>"
+        f"<td>{_outcome_cell(t)}</td>"
+        f"<td>{_finishes_cell(t)}</td></tr>"
         for t in trades
-    ) or "<tr><td colspan='11' class='empty'>No bet signals logged yet.</td></tr>"
+    ) or "<tr><td colspan='12' class='empty'>No bet signals logged yet.</td></tr>"
 
     page = f"""<!doctype html>
 <html>
@@ -129,7 +144,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
 
   <h2>Recent bet signals</h2>
   <table>
-    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Bookmakers</th><th>Mode</th><th>Outcome</th></tr>
+    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Bookmakers</th><th>Mode</th><th>Outcome</th><th>Finishes</th></tr>
     {trades_rows}
   </table>
 

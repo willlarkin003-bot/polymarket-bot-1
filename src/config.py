@@ -41,6 +41,8 @@ class Config:
     dry_run: bool
     dashboard_username: str = ""
     dashboard_password: str = ""
+    near_term_window_days: float = 9.0
+    max_long_dated_positions: int = 5
 
     @staticmethod
     def load() -> "Config":
@@ -61,6 +63,8 @@ class Config:
             dry_run=_bool_env("DRY_RUN", True),
             dashboard_username=os.getenv("DASHBOARD_USERNAME", ""),
             dashboard_password=os.getenv("DASHBOARD_PASSWORD", ""),
+            near_term_window_days=_float_env("NEAR_TERM_WINDOW_DAYS", 9.0),
+            max_long_dated_positions=_int_env("MAX_LONG_DATED_POSITIONS", 5),
         )
 
     def require_live_credentials(self) -> None:

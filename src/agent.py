@@ -125,6 +125,12 @@ class TradingAgent:
             logger.info("Settled %d trade(s) this round", settled)
 
         markets = fetch_open_sports_markets(self.polymarket)
+        # Near-term markets get first claim on the weekly position budget, so
+        # long-dated futures don't crowd out games resolving soon - see
+        # RiskManager.check's max_long_dated_positions cap for the other half
+        # of this: markets with no known resolves_at sort last (treated as
+        # long-dated, same as the risk check does for an unknown date).
+        markets.sort(key=lambda m: m.resolves_at if m.resolves_at is not None else float("inf"))
         logger.info("Fetched %d open sports markets", len(markets))
         self._signal_errors = 0
 
@@ -152,7 +158,7 @@ class TradingAgent:
                 min_edge=self.config.min_edge,
             )
 
-            check = self.risk.check(market.market_id, decision)
+            check = self.risk.check(market.market_id, decision, resolves_at=market.resolves_at)
             if not check.approved:
                 logger.debug("Skipping market %s: %s", market.market_id, check.reason)
                 risk_rejected += 1
@@ -184,6 +190,7 @@ class TradingAgent:
                     dry_run=self.config.dry_run,
                     timestamp=time.time(),
                     market_question=market.question,
+                    resolves_at=market.resolves_at or 0.0,
                 )
             )
             placed += 1
