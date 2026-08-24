@@ -23,19 +23,33 @@ class TradingAgent:
         self.config = config
         self.state = StateStore()
         self.risk = RiskManager(config, self.state)
-        self.signals = SignalEngine(api_key=config.anthropic_api_key) if config.anthropic_api_key else None
+        self.signals = (
+            SignalEngine(api_key=config.anthropic_api_key, model=config.anthropic_model)
+            if config.anthropic_api_key else None
+        )
         self.polymarket = PolymarketUS(key_id=config.key_id or None, secret_key=config.secret_key or None)
         self.client = PolymarketClient(config, self.polymarket)
-        self._odds_cache = {}
+        self._odds_cache = {}  # sport_key -> (fetched_at, events) - persists across rounds, see _events_for_sport
+        self._signal_errors = 0
 
     def _events_for_sport(self, sport_key: str) -> list:
-        if sport_key not in self._odds_cache:
-            try:
-                self._odds_cache[sport_key] = fetch_events(sport_key, self.config.odds_api_key)
-            except Exception:
-                logger.exception("Failed to fetch sportsbook odds for %s", sport_key)
-                self._odds_cache[sport_key] = []
-        return self._odds_cache[sport_key]
+        """Cross-round cached: The Odds API's free tier is 500 requests/month,
+        and re-fetching fresh every 15-minute round burns through that in a
+        couple of days. Odds don't move fast enough to need fetching more
+        often than ODDS_CACHE_TTL_SECONDS (default 20 min) anyway."""
+        cached = self._odds_cache.get(sport_key)
+        if cached is not None:
+            fetched_at, events = cached
+            if time.time() - fetched_at < self.config.odds_cache_ttl_seconds:
+                return events
+
+        try:
+            events = fetch_events(sport_key, self.config.odds_api_key)
+        except Exception:
+            logger.exception("Failed to fetch sportsbook odds for %s", sport_key)
+            events = []
+        self._odds_cache[sport_key] = (time.time(), events)
+        return events
 
     def _estimate_probability(self, market: SportsMarket) -> Tuple[Optional[float], Optional[str]]:
         """Prefer a real edge (sportsbook consensus vs Polymarket price) over an
@@ -65,13 +79,14 @@ class TradingAgent:
                 return prob, "llm"
             except Exception:
                 logger.exception("Signal generation failed for market %s", market.market_id)
+                self._signal_errors += 1
 
         return None, None
 
     def run_once(self) -> None:
         markets = fetch_open_sports_markets(self.polymarket)
         logger.info("Fetched %d open sports markets", len(markets))
-        self._odds_cache.clear()
+        self._signal_errors = 0
 
         already_held = 0
         no_signal = 0
@@ -132,14 +147,16 @@ class TradingAgent:
             placed += 1
 
         logger.info(
-            "Round complete: %d markets, %d already held, %d no signal, %d risk-rejected, %d placed",
-            len(markets), already_held, no_signal, risk_rejected, placed,
+            "Round complete: %d markets, %d already held, %d no signal (%d signal errors), "
+            "%d risk-rejected, %d placed",
+            len(markets), already_held, no_signal, self._signal_errors, risk_rejected, placed,
         )
         self.state.record_round(
             RoundSummary(
                 markets_fetched=len(markets),
                 already_held=already_held,
                 no_signal=no_signal,
+                signal_errors=self._signal_errors,
                 risk_rejected=risk_rejected,
                 placed=placed,
                 timestamp=time.time(),

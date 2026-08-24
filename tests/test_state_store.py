@@ -21,12 +21,13 @@ def test_record_and_query_trade_with_source(state):
 
 def test_record_and_query_round_summary(state):
     state.record_round(RoundSummary(
-        markets_fetched=50, already_held=2, no_signal=45, risk_rejected=1, placed=2,
+        markets_fetched=50, already_held=2, no_signal=45, signal_errors=3, risk_rejected=1, placed=2,
         timestamp=time.time(),
     ))
     rounds = state.recent_rounds()
     assert len(rounds) == 1
     assert rounds[0]["markets_fetched"] == 50
+    assert rounds[0]["signal_errors"] == 3
     assert rounds[0]["placed"] == 2
 
 
@@ -67,3 +68,38 @@ def test_migrates_db_created_before_source_column_existed(tmp_path):
     store.record_trade(Trade("new-market", "YES", 0.5, 10.0, 0.6, 0.1, "llm", True, time.time()))
     trades = store.recent_trades()
     assert {t["market_id"] for t in trades} == {"old-market", "new-market"}
+
+
+def test_migrates_rounds_table_created_before_signal_errors_column_existed(tmp_path):
+    db_path = str(tmp_path / "old_rounds.db")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE rounds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                markets_fetched INTEGER NOT NULL,
+                already_held INTEGER NOT NULL,
+                no_signal INTEGER NOT NULL,
+                risk_rejected INTEGER NOT NULL,
+                placed INTEGER NOT NULL,
+                timestamp REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO rounds (markets_fetched, already_held, no_signal, risk_rejected, placed, timestamp) "
+            "VALUES (50, 2, 45, 1, 2, 0.0)"
+        )
+        conn.commit()
+
+    store = StateStore(db_path=db_path)  # should migrate in place, not raise
+    rounds = store.recent_rounds()
+    assert len(rounds) == 1
+    assert rounds[0]["signal_errors"] == 0  # backfilled default for the pre-existing row
+
+    store.record_round(RoundSummary(
+        markets_fetched=10, already_held=0, no_signal=5, signal_errors=2, risk_rejected=0, placed=3,
+        timestamp=time.time(),
+    ))
+    rounds = store.recent_rounds()
+    assert len(rounds) == 2

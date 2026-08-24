@@ -16,7 +16,7 @@ Respond with ONLY a JSON object, no other text:
 
 
 class SignalEngine:
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5"):
+    def __init__(self, api_key: str, model: str = "claude-haiku-4-5-20251001"):
         self._client = Anthropic(api_key=api_key)
         self._model = model
 

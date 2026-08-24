@@ -27,6 +27,10 @@ back to a Claude probability estimate only for markets sportsbooks don't cover.
   team names for the first while and confirm they're actually right before trusting it with size.
 - The Claude fallback signal (`src/signal_engine.py`) only knows what's in the prompt — it's
   meaningfully weaker than the sportsbook consensus and only used when no confident match exists.
+- **If bets stop happening entirely, check the dashboard's "Signal errors" column first.** An
+  invalid `ANTHROPIC_MODEL`, an expired/rate-limited `ODDS_API_KEY`, or bad Odds API credentials
+  all fail *silently* into "no signal" from the outside — every market just quietly gets skipped,
+  round after round, with nothing obviously wrong until you look at `agent.log` or that column.
 - Start in dry-run mode, on a small bankroll figure, and watch the logs before ever setting
   `DRY_RUN=false`.
 
@@ -63,7 +67,9 @@ Required environment variables (see `.env.example`):
 | `POLYMARKET_KEY_ID` | Polymarket US API key ID (Settings -> Trading API). **Never commit this.** |
 | `POLYMARKET_SECRET_KEY` | Polymarket US API secret key, paired with the above. **Never commit this.** |
 | `ANTHROPIC_API_KEY` | Fallback probability estimate, only used when no sportsbook match exists. |
+| `ANTHROPIC_MODEL` | Model ID for the fallback signal (default `claude-haiku-4-5-20251001`). Must be a real, currently-available model — an invalid one fails every call silently (see "Read this first" above). |
 | `ODDS_API_KEY` | [The Odds API](https://the-odds-api.com) key. Powers the real value-bet signal — leave blank and every market falls back to the weaker Claude-only estimate. |
+| `ODDS_CACHE_TTL_SECONDS` | How long to reuse fetched sportsbook odds *across scheduled runs*, not just within one (default 1200s / 20 min). Keeps you inside the Odds API free tier — see below. |
 | `MIN_BOOKMAKERS` | Minimum number of books that must quote both sides of a game before its consensus is trusted (default 3). |
 | `MATCH_CONFIDENCE` | Minimum text-match confidence (0–1) to link a Polymarket market to a sportsbook game (default 0.6). |
 | `BANKROLL_USD` | **Weekly** budget. Kelly sizing is computed against it, and once total stakes since Monday 00:00 UTC reach this amount, the agent stops opening new positions until the next Monday, when the count resets. |
@@ -113,7 +119,12 @@ For each open Polymarket sports market, `agent.py` (`_estimate_probability`) doe
 1. `sport_keys.guess_sport_key` keyword-matches the question/description to an Odds API sport
    (e.g. "NBA" -> `basketball_nba`). Unrecognized sports skip straight to the Claude fallback.
 2. `odds_provider.fetch_events` pulls live moneyline odds for that sport from every US
-   bookmaker The Odds API covers (cached per sport for the duration of one `run_once` pass).
+   bookmaker The Odds API covers. Cached per sport for `ODDS_CACHE_TTL_SECONDS` (default 20
+   min) - across scheduled runs, not just within one - since odds don't move fast enough to
+   need fetching every 15 minutes, and the free tier's 500 requests/month doesn't survive
+   fetching that often uncached (this was a real bug: earlier versions re-fetched every single
+   round, which exhausts the free tier in about 2 days and then silently kills every sportsbook
+   signal until the month rolls over).
 3. `market_matcher.match_market` figures out which game the Polymarket question is about and
    which team's win corresponds to its YES outcome — either directly, from the market's own
    `outcome`/`team.name` field (Polymarket US markets are already per-outcome), or by
@@ -132,10 +143,10 @@ was used (`signal=sportsbook` vs `signal=llm`) so you can see how often each is 
 
 **What you need to turn this on:**
 - An account and API key at [the-odds-api.com](https://the-odds-api.com) — the free tier is
-  500 requests/month. Each `run_once` pass makes roughly one request per distinct sport
-  represented among the fetched Polymarket markets (cached within that pass, not across runs).
-  On a 15-minute cron with markets spanning 2–3 sports, that's well over 500/month — either
-  slow the cron interval (e.g. hourly) or upgrade the plan once you've validated the matching.
+  500 requests/month. With the default 20-minute `ODDS_CACHE_TTL_SECONDS` and a 15-minute cron,
+  a sport's odds get re-fetched roughly every other round, not every round — a handful of
+  active sports should comfortably fit the free tier. Lower the TTL only if you've upgraded
+  the plan or you're tracking very few sports.
 - `LEAGUE_TO_ODDS_SPORT_KEY` in `src/sport_keys.py` only covers the major US leagues plus a
   few others out of the box — add entries for any sport/league you trade that isn't in there,
   or it'll silently fall back to the Claude estimate for those markets.

@@ -36,9 +36,10 @@ def render_page(state: StateStore, config: Config) -> bytes:
     rounds_rows = "".join(
         f"<tr><td>{_fmt_ts(r['timestamp'])}</td><td>{r['markets_fetched']}</td>"
         f"<td>{r['already_held']}</td><td>{r['no_signal']}</td>"
+        f"<td>{'<b style=\"color:#e5484d\">' + str(r['signal_errors']) + '</b>' if r.get('signal_errors') else r.get('signal_errors', 0)}</td>"
         f"<td>{r['risk_rejected']}</td><td><b>{r['placed']}</b></td></tr>"
         for r in rounds
-    ) or "<tr><td colspan='6' class='empty'>No rounds recorded yet - wait for the next scheduled run.</td></tr>"
+    ) or "<tr><td colspan='7' class='empty'>No rounds recorded yet - wait for the next scheduled run.</td></tr>"
 
     trades_rows = "".join(
         f"<tr><td>{_fmt_ts(t['timestamp'])}</td><td>{_esc(t['market_id'])}</td>"
@@ -89,7 +90,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
 
   <h2>Recent rounds (every scheduled run, whether or not it bet)</h2>
   <table>
-    <tr><th>Time</th><th>Fetched</th><th>Already held</th><th>No signal</th><th>Risk-rejected</th><th>Placed</th></tr>
+    <tr><th>Time</th><th>Fetched</th><th>Already held</th><th>No signal</th><th>Signal errors</th><th>Risk-rejected</th><th>Placed</th></tr>
     {rounds_rows}
   </table>
 

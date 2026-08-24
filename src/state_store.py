@@ -32,6 +32,7 @@ class RoundSummary:
     markets_fetched: int
     already_held: int
     no_signal: int
+    signal_errors: int  # subset of no_signal caused by an exception (e.g. bad model/API key), not a real "no edge"
     risk_rejected: int
     placed: int
     timestamp: float
@@ -79,12 +80,18 @@ class StateStore:
                     markets_fetched INTEGER NOT NULL,
                     already_held INTEGER NOT NULL,
                     no_signal INTEGER NOT NULL,
+                    signal_errors INTEGER NOT NULL DEFAULT 0,
                     risk_rejected INTEGER NOT NULL,
                     placed INTEGER NOT NULL,
                     timestamp REAL NOT NULL
                 )
                 """
             )
+            # Migrate DBs created before the `signal_errors` column existed.
+            existing_round_cols = {row[1] for row in conn.execute("PRAGMA table_info(rounds)")}
+            if "signal_errors" not in existing_round_cols:
+                conn.execute("ALTER TABLE rounds ADD COLUMN signal_errors INTEGER NOT NULL DEFAULT 0")
+
             conn.commit()
 
     def has_position(self, market_id: str) -> bool:
@@ -121,13 +128,14 @@ class StateStore:
             conn.execute(
                 """
                 INSERT INTO rounds
-                    (markets_fetched, already_held, no_signal, risk_rejected, placed, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (markets_fetched, already_held, no_signal, signal_errors, risk_rejected, placed, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     round_summary.markets_fetched,
                     round_summary.already_held,
                     round_summary.no_signal,
+                    round_summary.signal_errors,
                     round_summary.risk_rejected,
                     round_summary.placed,
                     round_summary.timestamp,

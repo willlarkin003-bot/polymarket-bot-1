@@ -28,7 +28,9 @@ class Config:
     key_id: str
     secret_key: str
     anthropic_api_key: str
+    anthropic_model: str
     odds_api_key: str
+    odds_cache_ttl_seconds: int
     bankroll_usd: float
     kelly_multiplier: float
     max_position_pct: float
@@ -44,7 +46,9 @@ class Config:
             key_id=os.getenv("POLYMARKET_KEY_ID", ""),
             secret_key=os.getenv("POLYMARKET_SECRET_KEY", ""),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+            anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
             odds_api_key=os.getenv("ODDS_API_KEY", ""),
+            odds_cache_ttl_seconds=_int_env("ODDS_CACHE_TTL_SECONDS", 1200),
             bankroll_usd=_float_env("BANKROLL_USD", 1000.0),
             kelly_multiplier=_float_env("KELLY_MULTIPLIER", 0.5),
             max_position_pct=_float_env("MAX_POSITION_PCT", 0.05),

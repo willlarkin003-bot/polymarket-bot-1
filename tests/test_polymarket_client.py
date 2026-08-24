@@ -9,7 +9,8 @@ from src.polymarket_client import PolymarketClient
 def _config(dry_run=True, key_id="key", secret_key="secret"):
     return Config(
         key_id=key_id, secret_key=secret_key,
-        anthropic_api_key="", odds_api_key="", bankroll_usd=1000.0, kelly_multiplier=0.5,
+        anthropic_api_key="", anthropic_model="claude-haiku-4-5-20251001",
+        odds_api_key="", odds_cache_ttl_seconds=1200, bankroll_usd=1000.0, kelly_multiplier=0.5,
         max_position_pct=0.05, max_open_positions=10,
         min_edge=0.04, min_bookmakers=3, match_confidence=0.6, dry_run=dry_run,
     )
