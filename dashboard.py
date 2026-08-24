@@ -3,8 +3,14 @@
 Run with `python dashboard.py` from the repo root (same folder as main.py, so
 it picks up the same .env and agent_state.db), then open http://localhost:8765
 in a browser. Auto-refreshes every 30 seconds. Stdlib only - no extra install.
+
+If DASHBOARD_USERNAME/DASHBOARD_PASSWORD are set in .env, every request must
+pass HTTP Basic Auth with those credentials. Set them before exposing this
+dashboard outside your own machine (e.g. via an ngrok tunnel) - see README.
 """
 
+import base64
+import hmac
 import html
 import http.server
 import socketserver
@@ -24,6 +30,12 @@ def _esc(value) -> str:
     return html.escape(str(value))
 
 
+def _signal_errors_cell(count: int) -> str:
+    if count:
+        return f'<b style="color:#e5484d">{count}</b>'
+    return str(count)
+
+
 def render_page(state: StateStore, config: Config) -> bytes:
     trades = state.recent_trades(50)
     rounds = state.recent_rounds(50)
@@ -36,7 +48,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
     rounds_rows = "".join(
         f"<tr><td>{_fmt_ts(r['timestamp'])}</td><td>{r['markets_fetched']}</td>"
         f"<td>{r['already_held']}</td><td>{r['no_signal']}</td>"
-        f"<td>{'<b style=\"color:#e5484d\">' + str(r['signal_errors']) + '</b>' if r.get('signal_errors') else r.get('signal_errors', 0)}</td>"
+        f"<td>{_signal_errors_cell(r.get('signal_errors', 0))}</td>"
         f"<td>{r['risk_rejected']}</td><td><b>{r['placed']}</b></td></tr>"
         for r in rounds
     ) or "<tr><td colspan='7' class='empty'>No rounds recorded yet - wait for the next scheduled run.</td></tr>"
@@ -105,12 +117,26 @@ def render_page(state: StateStore, config: Config) -> bytes:
     return page.encode("utf-8")
 
 
+def _auth_ok(header_value: str, username: str, password: str) -> bool:
+    expected = "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()
+    return hmac.compare_digest(header_value or "", expected)
+
+
 def main() -> None:
     config = Config.load()
     state = StateStore()
+    auth_required = bool(config.dashboard_username and config.dashboard_password)
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            if auth_required and not _auth_ok(
+                self.headers.get("Authorization"), config.dashboard_username, config.dashboard_password
+            ):
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="Polymarket Dashboard"')
+                self.end_headers()
+                return
+
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -128,6 +154,9 @@ def main() -> None:
 
     with httpd:
         print(f"Dashboard running at http://localhost:{PORT}  (Ctrl+C to stop)")
+        if not auth_required:
+            print("No DASHBOARD_USERNAME/DASHBOARD_PASSWORD set - dashboard has no login. "
+                  "Set both in .env before exposing this outside your own machine.")
         httpd.serve_forever()
 
 

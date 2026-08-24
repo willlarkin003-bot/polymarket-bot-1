@@ -154,6 +154,41 @@ whose lines the edge came from.
   few others out of the box — add entries for any sport/league you trade that isn't in there,
   or it'll silently fall back to the Claude estimate for those markets.
 
+## Dashboard
+
+`python dashboard.py` (or double-click `open_dashboard.bat` on Windows) starts a read-only web
+page at `http://localhost:8765` showing recent rounds, bet signals, and weekly bankroll usage.
+It only reads `agent_state.db`, so it's safe to leave running alongside the agent.
+
+### View from your phone (public URL)
+
+The dashboard only binds to `127.0.0.1` — it isn't reachable from outside your PC by default.
+To check it from your phone or another device, tunnel it out with [ngrok](https://ngrok.com)
+(free) instead of exposing the port directly:
+
+1. **Set a login first.** Open `.env` and set `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` to
+   values only you know — without these, anyone with the public URL could see your bot's
+   activity and bankroll. Restart the dashboard after saving.
+2. Sign up free at [ngrok.com](https://ngrok.com), then on the dashboard grab your authtoken
+   from **Your Authtoken** and, in a terminal, run:
+   ```
+   ngrok config add-authtoken <your-token>
+   ```
+3. Download `ngrok.exe` (Windows) from [ngrok.com/download](https://ngrok.com/download) and put
+   it in this same `polymarket-bot-1` folder.
+4. Double-click `start_public_dashboard.bat`. It opens two windows: the dashboard, and an ngrok
+   tunnel. The ngrok window prints a `Forwarding` line with a URL like
+   `https://xxxx-xx-xx-xxx-xx.ngrok-free.app` — that's your public link.
+5. Open that URL on your phone. It'll prompt for the username/password from step 1.
+
+The free ngrok URL changes each time you restart the tunnel. If you want a URL that never
+changes, claim a free static domain under **Domains** in your ngrok dashboard, then run
+`ngrok http 8765 --domain=your-name.ngrok-free.app` instead (or edit that flag into
+`start_public_dashboard.bat`).
+
+Your bot and its data never leave your PC — ngrok just forwards traffic to the dashboard
+already running locally.
+
 ## Running unattended
 
 `python main.py --interval 900` runs forever, polling every 15 minutes — fine on a machine you

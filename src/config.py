@@ -39,6 +39,8 @@ class Config:
     min_bookmakers: int
     match_confidence: float
     dry_run: bool
+    dashboard_username: str = ""
+    dashboard_password: str = ""
 
     @staticmethod
     def load() -> "Config":
@@ -57,6 +59,8 @@ class Config:
             min_bookmakers=_int_env("MIN_BOOKMAKERS", 3),
             match_confidence=_float_env("MATCH_CONFIDENCE", 0.6),
             dry_run=_bool_env("DRY_RUN", True),
+            dashboard_username=os.getenv("DASHBOARD_USERNAME", ""),
+            dashboard_password=os.getenv("DASHBOARD_PASSWORD", ""),
         )
 
     def require_live_credentials(self) -> None:
