@@ -207,18 +207,39 @@ To check it from your phone or another device, tunnel it out with [ngrok](https:
    ```
 3. Download `ngrok.exe` (Windows) from [ngrok.com/download](https://ngrok.com/download) and put
    it in this same `polymarket-bot-1` folder.
-4. Double-click `start_public_dashboard.bat`. It opens two windows: the dashboard, and an ngrok
-   tunnel. The ngrok window prints a `Forwarding` line with a URL like
-   `https://xxxx-xx-xx-xxx-xx.ngrok-free.app` — that's your public link.
-5. Open that URL on your phone. It'll prompt for the username/password from step 1.
+4. **Claim a free static domain** under **Domains** in your ngrok dashboard — this gives you a
+   URL that never changes, like `your-name.ngrok-free.app`. Put it in `.env`:
+   ```
+   NGROK_DOMAIN=your-name.ngrok-free.app
+   ```
+5. Double-click `start_public_dashboard.bat`. It opens two windows: the dashboard, and an ngrok
+   tunnel using the domain from step 4. Open that URL on your phone — it'll prompt for the
+   username/password from step 1.
 
-The free ngrok URL changes each time you restart the tunnel. If you want a URL that never
-changes, claim a free static domain under **Domains** in your ngrok dashboard, then run
-`ngrok http 8765 --domain=your-name.ngrok-free.app` instead (or edit that flag into
-`start_public_dashboard.bat`).
+(Leave `NGROK_DOMAIN` blank instead if you don't mind the link changing every restart — ngrok
+prints the random URL it picked in the tunnel window's `Forwarding` line.)
 
 Your bot and its data never leave your PC — ngrok just forwards traffic to the dashboard
 already running locally.
+
+### Making the public link always-on (no PowerShell needed day to day)
+
+By default the dashboard and tunnel only run while `start_public_dashboard.bat` is open. To have
+both start automatically every time you log into Windows — so the link just always works, even
+if you're not at the desktop — register a scheduled task once, the same way `main.py` is already
+scheduled (see "Running unattended" below):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "C:\path\to\polymarket-bot-1\start_public_dashboard.bat" `
+    -WorkingDirectory "C:\path\to\polymarket-bot-1"
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+Register-ScheduledTask -TaskName "PolymarketPublicDashboard" -Action $action -Trigger $trigger
+```
+
+(Swap in your real folder path — same one `git pull` runs in.) After this, the dashboard and
+tunnel windows open automatically at every login and just sit there running; you never need to
+run `start_public_dashboard.bat` by hand again. To undo it later: `Unregister-ScheduledTask
+-TaskName "PolymarketPublicDashboard"`.
 
 ## Running unattended
 

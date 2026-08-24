@@ -10,6 +10,16 @@ if not exist ngrok.exe (
     exit /b 1
 )
 
+set NGROK_DOMAIN=
+for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
+    if "%%A"=="NGROK_DOMAIN" set NGROK_DOMAIN=%%B
+)
+
 start "Polymarket Dashboard" cmd /k python dashboard.py
 timeout /t 2 /nobreak >nul
-start "Polymarket Public Tunnel" cmd /k ngrok.exe http 8765
+
+if "%NGROK_DOMAIN%"=="" (
+    start "Polymarket Public Tunnel" cmd /k ngrok.exe http 8765
+) else (
+    start "Polymarket Public Tunnel" cmd /k ngrok.exe http 8765 --domain=%NGROK_DOMAIN%
+)
