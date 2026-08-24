@@ -12,11 +12,12 @@ def state(tmp_path):
 
 
 def test_record_and_query_trade_with_source(state):
-    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", True, time.time()))
+    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, time.time()))
     assert state.has_position("m1")
     trades = state.recent_trades()
     assert len(trades) == 1
     assert trades[0]["source"] == "sportsbook"
+    assert trades[0]["bookmakers"] == "book_a, book_b"
 
 
 def test_record_and_query_round_summary(state):
@@ -32,8 +33,8 @@ def test_record_and_query_round_summary(state):
 
 
 def test_recent_trades_and_rounds_are_ordered_newest_first(state):
-    state.record_trade(Trade("old", "YES", 0.5, 10.0, 0.6, 0.1, "llm", True, 100.0))
-    state.record_trade(Trade("new", "YES", 0.5, 10.0, 0.6, 0.1, "llm", True, 200.0))
+    state.record_trade(Trade("old", "YES", 0.5, 10.0, 0.6, 0.1, "llm", "", True, 100.0))
+    state.record_trade(Trade("new", "YES", 0.5, 10.0, 0.6, 0.1, "llm", "", True, 200.0))
     trades = state.recent_trades()
     assert [t["market_id"] for t in trades] == ["new", "old"]
 
@@ -65,7 +66,7 @@ def test_migrates_db_created_before_source_column_existed(tmp_path):
     store = StateStore(db_path=db_path)  # should migrate in place, not raise
     assert store.has_position("old-market")
 
-    store.record_trade(Trade("new-market", "YES", 0.5, 10.0, 0.6, 0.1, "llm", True, time.time()))
+    store.record_trade(Trade("new-market", "YES", 0.5, 10.0, 0.6, 0.1, "llm", "", True, time.time()))
     trades = store.recent_trades()
     assert {t["market_id"] for t in trades} == {"old-market", "new-market"}
 

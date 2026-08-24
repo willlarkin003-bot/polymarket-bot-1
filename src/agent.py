@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from polymarket_us import PolymarketUS
 
@@ -51,7 +51,9 @@ class TradingAgent:
         self._odds_cache[sport_key] = (time.time(), events)
         return events
 
-    def _estimate_probability(self, market: SportsMarket) -> Tuple[Optional[float], Optional[str]]:
+    def _estimate_probability(
+        self, market: SportsMarket
+    ) -> Tuple[Optional[float], Optional[str], List[str]]:
         """Prefer a real edge (sportsbook consensus vs Polymarket price) over an
         LLM guess. Falls back to Claude only when no confident, well-covered
         sportsbook match exists for this market."""
@@ -64,10 +66,11 @@ class TradingAgent:
                 )
                 if signal and signal.num_bookmakers >= self.config.min_bookmakers:
                     logger.info(
-                        "Sportsbook consensus for %r: %.3f (%d books, matched %s)",
-                        market.question, signal.model_prob, signal.num_bookmakers, signal.yes_team,
+                        "Sportsbook consensus for %r: %.3f (%d books: %s, matched %s)",
+                        market.question, signal.model_prob, signal.num_bookmakers,
+                        ", ".join(signal.bookmakers), signal.yes_team,
                     )
-                    return signal.model_prob, "sportsbook"
+                    return signal.model_prob, "sportsbook", signal.bookmakers
 
         if self.signals is not None:
             try:
@@ -76,12 +79,12 @@ class TradingAgent:
                     description=market.description,
                     yes_price=market.yes_price,
                 )
-                return prob, "llm"
+                return prob, "llm", []
             except Exception:
                 logger.exception("Signal generation failed for market %s", market.market_id)
                 self._signal_errors += 1
 
-        return None, None
+        return None, None, []
 
     def run_once(self) -> None:
         markets = fetch_open_sports_markets(self.polymarket)
@@ -98,7 +101,7 @@ class TradingAgent:
                 already_held += 1
                 continue
 
-            model_prob, source = self._estimate_probability(market)
+            model_prob, source, bookmakers = self._estimate_probability(market)
             if model_prob is None:
                 no_signal += 1
                 continue
@@ -140,6 +143,7 @@ class TradingAgent:
                     model_prob=model_prob,
                     edge=decision.edge,
                     source=source,
+                    bookmakers=", ".join(bookmakers),
                     dry_run=self.config.dry_run,
                     timestamp=time.time(),
                 )

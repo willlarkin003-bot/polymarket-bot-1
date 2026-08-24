@@ -12,6 +12,7 @@ class ValueBetSignal:
     matched_event_id: str
     yes_team: str
     num_bookmakers: int
+    bookmakers: List[str]  # names of the books whose lines fed the consensus, e.g. ["draftkings", "fanduel"]
 
 
 def find_value_bet_signal(
@@ -35,15 +36,16 @@ def find_value_bet_signal(
         if matched.yes_team == matched.event.home_team
         else matched.event.home_team
     )
-    num_books = sum(
-        1
+    contributing_books = [
+        line.bookmaker
         for line in matched.event.lines
         if matched.yes_team in line.team_price and other_team in line.team_price
-    )
+    ]
 
     return ValueBetSignal(
         model_prob=prob,
         matched_event_id=matched.event.event_id,
         yes_team=matched.yes_team,
-        num_bookmakers=num_books,
+        num_bookmakers=len(contributing_books),
+        bookmakers=contributing_books,
     )

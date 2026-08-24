@@ -139,7 +139,10 @@ For each open Polymarket sports market, `agent.py` (`_estimate_probability`) doe
 The resulting probability feeds into `kelly.decide_bet` exactly like the LLM signal did before —
 the difference is it's now backed by real market prices from books that have their own money on
 the line, not a language model's guess. Every placed trade's log line shows which signal source
-was used (`signal=sportsbook` vs `signal=llm`) so you can see how often each is firing.
+was used (`signal=sportsbook` vs `signal=llm`) so you can see how often each is firing. For
+sportsbook-sourced trades, the log line and the dashboard's "Bookmakers" column also name the
+specific books that fed the consensus (e.g. `draftkings, fanduel, betmgm`), so you can see exactly
+whose lines the edge came from.
 
 **What you need to turn this on:**
 - An account and API key at [the-odds-api.com](https://the-odds-api.com) — the free tier is

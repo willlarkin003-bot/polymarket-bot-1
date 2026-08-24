@@ -46,9 +46,10 @@ def render_page(state: StateStore, config: Config) -> bytes:
         f"<td>{_esc(t['side'])}</td><td>${t['price']:.2f}</td><td>${t['stake_usd']:.2f}</td>"
         f"<td>{t['model_prob']:.2f}</td><td>{t['edge']:.2f}</td>"
         f"<td>{_esc(t['source'] or '?')}</td>"
+        f"<td>{_esc(t['bookmakers']) if t.get('bookmakers') else '-'}</td>"
         f"<td>{'LIVE' if not t['dry_run'] else 'dry-run'}</td></tr>"
         for t in trades
-    ) or "<tr><td colspan='9' class='empty'>No bet signals logged yet.</td></tr>"
+    ) or "<tr><td colspan='10' class='empty'>No bet signals logged yet.</td></tr>"
 
     page = f"""<!doctype html>
 <html>
@@ -96,7 +97,7 @@ def render_page(state: StateStore, config: Config) -> bytes:
 
   <h2>Recent bet signals</h2>
   <table>
-    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Mode</th></tr>
+    <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Stake</th><th>Model P</th><th>Edge</th><th>Signal</th><th>Bookmakers</th><th>Mode</th></tr>
     {trades_rows}
   </table>
 </body>

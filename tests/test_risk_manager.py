@@ -57,7 +57,7 @@ def test_rejects_stake_over_cap(config, state):
 def test_rejects_duplicate_market(config, state):
     risk = RiskManager(config, state)
     from src.state_store import Trade
-    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", True, 0.0))
+    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, 0.0))
     check = risk.check("m1", make_decision())
     assert not check.approved
 
@@ -65,8 +65,8 @@ def test_rejects_duplicate_market(config, state):
 def test_rejects_when_max_open_positions_reached(config, state):
     from src.state_store import Trade
     risk = RiskManager(config, state)
-    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", True, 0.0))
-    state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", True, 0.0))
+    state.record_trade(Trade("m1", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, 0.0))
+    state.record_trade(Trade("m2", "YES", 0.5, 40.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, 0.0))
     check = risk.check("m3", make_decision())
     assert not check.approved
 
@@ -74,7 +74,7 @@ def test_rejects_when_max_open_positions_reached(config, state):
 def test_rejects_when_weekly_bankroll_exhausted(config, state):
     from src.state_store import Trade
     risk = RiskManager(config, state)
-    state.record_trade(Trade("m1", "YES", 0.5, 980.0, 0.6, 0.1, "sportsbook", True, time.time()))
+    state.record_trade(Trade("m1", "YES", 0.5, 980.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, time.time()))
     check = risk.check("m2", make_decision(stake_usd=40.0))
     assert not check.approved
     assert "weekly" in check.reason
@@ -84,6 +84,6 @@ def test_weekly_bankroll_resets_for_trades_from_prior_weeks(config, state):
     from src.state_store import Trade
     risk = RiskManager(config, state)
     three_weeks_ago = time.time() - 21 * 86400
-    state.record_trade(Trade("m1", "YES", 0.5, 980.0, 0.6, 0.1, "sportsbook", True, three_weeks_ago))
+    state.record_trade(Trade("m1", "YES", 0.5, 980.0, 0.6, 0.1, "sportsbook", "book_a, book_b", True, three_weeks_ago))
     check = risk.check("m2", make_decision(stake_usd=40.0))
     assert check.approved

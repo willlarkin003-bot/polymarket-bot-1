@@ -23,6 +23,7 @@ class Trade:
     model_prob: float
     edge: float
     source: str  # "sportsbook" or "llm" - which signal produced this bet
+    bookmakers: str  # comma-separated book names backing a "sportsbook" trade, "" for "llm"
     dry_run: bool
     timestamp: float
 
@@ -59,15 +60,18 @@ class StateStore:
                     model_prob REAL NOT NULL,
                     edge REAL NOT NULL,
                     source TEXT NOT NULL DEFAULT '',
+                    bookmakers TEXT NOT NULL DEFAULT '',
                     dry_run INTEGER NOT NULL,
                     timestamp REAL NOT NULL
                 )
                 """
             )
-            # Migrate DBs created before the `source` column existed.
+            # Migrate DBs created before these columns existed.
             existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(trades)")}
             if "source" not in existing_cols:
                 conn.execute("ALTER TABLE trades ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+            if "bookmakers" not in existing_cols:
+                conn.execute("ALTER TABLE trades ADD COLUMN bookmakers TEXT NOT NULL DEFAULT ''")
 
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_trades_market_id ON trades(market_id)"
@@ -106,8 +110,8 @@ class StateStore:
             conn.execute(
                 """
                 INSERT INTO trades
-                    (market_id, side, price, stake_usd, model_prob, edge, source, dry_run, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (market_id, side, price, stake_usd, model_prob, edge, source, bookmakers, dry_run, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     trade.market_id,
@@ -117,6 +121,7 @@ class StateStore:
                     trade.model_prob,
                     trade.edge,
                     trade.source,
+                    trade.bookmakers,
                     int(trade.dry_run),
                     trade.timestamp,
                 ),
