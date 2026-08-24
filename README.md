@@ -205,8 +205,12 @@ To check it from your phone or another device, tunnel it out with [ngrok](https:
    ```
    ngrok config add-authtoken <your-token>
    ```
-3. Download `ngrok.exe` (Windows) from [ngrok.com/download](https://ngrok.com/download) and put
-   it in this same `polymarket-bot-1` folder.
+3. **Check whether ngrok is already installed** — run `ngrok` in PowerShell. If it prints a help
+   menu (a list of commands like `http`, `config`, `service`...), it's already there (often
+   pre-installed via the Microsoft Store/winget) and `start_public_dashboard.bat` will find it
+   automatically; skip to step 4. If PowerShell says the command isn't recognized, download
+   `ngrok.exe` (Windows) from [ngrok.com/download](https://ngrok.com/download) and put it in this
+   same `polymarket-bot-1` folder instead.
 4. **Claim a free static domain** under **Domains** in your ngrok dashboard — this gives you a
    URL that never changes, like `your-name.ngrok-free.app`. Put it in `.env`:
    ```
