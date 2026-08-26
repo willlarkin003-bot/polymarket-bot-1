@@ -44,7 +44,10 @@ class TradingAgent:
         for trade in self.state.unsettled_trades():
             try:
                 settlement = self.polymarket.markets.settlement(trade["market_id"])
-                settlement_price = float(settlement["settlementPrice"]["value"])
+                if "settlementPrice" in settlement:
+                    settlement_price = float(settlement["settlementPrice"]["value"])
+                else:
+                    settlement_price = float(settlement["settlement"])
             except Exception:
                 continue
 

@@ -156,6 +156,31 @@ def test_settled_market_records_realized_pnl(monkeypatch, tmp_path, caplog):
     assert "1 trade(s)" in summary
 
 
+def test_settled_market_records_realized_pnl_for_bare_settlement_field(monkeypatch, tmp_path):
+    # Live Polymarket US responses for these sports markets come back as
+    # {"slug": ..., "settlement": <price>} rather than the nested
+    # {"settlementPrice": {"value": ...}} shape - both must be handled.
+    db_path = str(tmp_path / "state.db")
+    monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
+    monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client, **kwargs: [])
+
+    agent = agent_module.TradingAgent(_config())
+    agent.state.record_trade(
+        Trade("aec-mlb-bos-mia-2026-08-24", "NO", 0.46, 25.0, 0.4, 0.1, "sportsbook", "", True, 0.0)
+    )
+
+    class FakeMarkets:
+        def settlement(self, slug):
+            return {"slug": slug, "settlement": 1}
+
+    agent.polymarket.markets = FakeMarkets()
+    agent.run_once()
+
+    trades = agent.state.recent_trades()
+    assert trades[0]["settled"] == 1
+    assert trades[0]["outcome"] == "LOST"  # NO at 0.46, settled to 1 (YES won) -> lost the stake
+
+
 def test_records_avg_book_odds_for_the_side_actually_bet(monkeypatch, tmp_path):
     db_path = str(tmp_path / "state.db")
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
