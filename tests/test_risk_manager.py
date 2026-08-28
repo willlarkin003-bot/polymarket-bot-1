@@ -182,3 +182,28 @@ def test_odds_range_is_configurable(config, state):
     risk = RiskManager(config, state)
     check = risk.check("m1", make_decision(), price=0.02)  # would be rejected under the default range
     assert check.approved
+
+
+def test_graduated_max_stake_at_favorite_edge(config, state):
+    risk = RiskManager(config, state)
+    # -200 (favorite edge of the default range) -> implied prob 200/300
+    assert risk.graduated_max_stake(200 / 300) == pytest.approx(config.favorite_max_stake_usd)
+
+
+def test_graduated_max_stake_at_longshot_edge(config, state):
+    risk = RiskManager(config, state)
+    # +600 (longshot edge of the default range) -> implied prob 100/700
+    assert risk.graduated_max_stake(100 / 700) == pytest.approx(config.longshot_max_stake_usd)
+
+
+def test_graduated_max_stake_interpolates_between_edges(config, state):
+    risk = RiskManager(config, state)
+    midpoint_prob = (200 / 300 + 100 / 700) / 2
+    cap = risk.graduated_max_stake(midpoint_prob)
+    assert config.longshot_max_stake_usd < cap < config.favorite_max_stake_usd
+
+
+def test_graduated_max_stake_clamps_beyond_either_edge(config, state):
+    risk = RiskManager(config, state)
+    assert risk.graduated_max_stake(0.95) == pytest.approx(config.favorite_max_stake_usd)
+    assert risk.graduated_max_stake(0.01) == pytest.approx(config.longshot_max_stake_usd)

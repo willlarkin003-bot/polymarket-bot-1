@@ -44,8 +44,10 @@ class Config:
     near_term_window_days: float = 9.0
     max_long_dated_positions: int = 5
     market_fetch_limit: int = 150
-    min_american_odds: float = -150.0
+    min_american_odds: float = -200.0
     max_american_odds: float = 600.0
+    favorite_max_stake_usd: float = 25.0
+    longshot_max_stake_usd: float = 5.0
 
     @staticmethod
     def load() -> "Config":
@@ -69,8 +71,10 @@ class Config:
             near_term_window_days=_float_env("NEAR_TERM_WINDOW_DAYS", 9.0),
             max_long_dated_positions=_int_env("MAX_LONG_DATED_POSITIONS", 5),
             market_fetch_limit=_int_env("MARKET_FETCH_LIMIT", 150),
-            min_american_odds=_float_env("MIN_AMERICAN_ODDS", -150.0),
+            min_american_odds=_float_env("MIN_AMERICAN_ODDS", -200.0),
             max_american_odds=_float_env("MAX_AMERICAN_ODDS", 600.0),
+            favorite_max_stake_usd=_float_env("FAVORITE_MAX_STAKE_USD", 25.0),
+            longshot_max_stake_usd=_float_env("LONGSHOT_MAX_STAKE_USD", 5.0),
         )
 
     def require_live_credentials(self) -> None:

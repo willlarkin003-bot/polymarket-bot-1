@@ -1,5 +1,6 @@
 import logging
 import time
+from dataclasses import replace
 from typing import List, Optional, Tuple
 
 from polymarket_us import PolymarketUS
@@ -167,6 +168,11 @@ class TradingAgent:
             )
 
             price = market.yes_price if decision.side == "YES" else 1.0 - market.yes_price
+
+            if decision.side != "PASS":
+                graduated_cap = self.risk.graduated_max_stake(price)
+                if decision.stake_usd > graduated_cap:
+                    decision = replace(decision, stake_usd=graduated_cap)
 
             check = self.risk.check(market.market_id, decision, resolves_at=market.resolves_at, price=price)
             if not check.approved:

@@ -4,7 +4,7 @@ from typing import Optional
 
 from src.config import Config
 from src.kelly import BetDecision
-from src.odds_provider import implied_prob_to_american
+from src.odds_provider import american_to_implied_prob, implied_prob_to_american
 from src.state_store import StateStore
 
 
@@ -18,6 +18,24 @@ class RiskManager:
     def __init__(self, config: Config, state: StateStore):
         self.config = config
         self.state = state
+
+    def graduated_max_stake(self, price: float) -> float:
+        """Interpolate the stake cap between LONGSHOT_MAX_STAKE_USD (at the
+        longshot edge of the allowed odds range, MAX_AMERICAN_ODDS) and
+        FAVORITE_MAX_STAKE_USD (at the favorite edge, MIN_AMERICAN_ODDS) - the
+        closer to even the bet, the more it's allowed to stake. Bets outside
+        the allowed range clamp to whichever edge they're nearest, but those
+        get rejected by check()'s odds-range test anyway."""
+        p_favorite_edge = american_to_implied_prob(self.config.min_american_odds)
+        p_longshot_edge = american_to_implied_prob(self.config.max_american_odds)
+        span = p_favorite_edge - p_longshot_edge
+        if span <= 0:
+            return self.config.favorite_max_stake_usd
+        t = (price - p_longshot_edge) / span
+        t = max(0.0, min(1.0, t))
+        return self.config.longshot_max_stake_usd + t * (
+            self.config.favorite_max_stake_usd - self.config.longshot_max_stake_usd
+        )
 
     def check(
         self, market_id: str, decision: BetDecision, resolves_at: Optional[float] = None,
