@@ -4,6 +4,7 @@ from typing import Optional
 
 from src.config import Config
 from src.kelly import BetDecision
+from src.odds_provider import implied_prob_to_american
 from src.state_store import StateStore
 
 
@@ -19,13 +20,23 @@ class RiskManager:
         self.state = state
 
     def check(
-        self, market_id: str, decision: BetDecision, resolves_at: Optional[float] = None
+        self, market_id: str, decision: BetDecision, resolves_at: Optional[float] = None,
+        price: Optional[float] = None,
     ) -> RiskCheck:
         if decision.side == "PASS":
             return RiskCheck(False, "no edge above min_edge threshold")
 
         if decision.stake_usd <= 0:
             return RiskCheck(False, "sized stake is zero or negative")
+
+        if price is not None:
+            american_odds = implied_prob_to_american(price)
+            if not (self.config.min_american_odds <= american_odds <= self.config.max_american_odds):
+                return RiskCheck(
+                    False,
+                    f"odds {american_odds:+.0f} outside configured range "
+                    f"({self.config.min_american_odds:+.0f} to {self.config.max_american_odds:+.0f})",
+                )
 
         if self.state.has_position(market_id):
             return RiskCheck(False, "already have an open position in this market")

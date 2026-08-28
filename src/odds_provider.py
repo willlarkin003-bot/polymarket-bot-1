@@ -28,6 +28,18 @@ def american_to_implied_prob(odds: float) -> float:
     return -odds / (-odds + 100.0)
 
 
+def implied_prob_to_american(prob: float) -> float:
+    """Inverse of american_to_implied_prob: the American odds a book would
+    post for a side priced at `prob` (no vig). Used to express Polymarket's
+    own 0-1 price in the same terms as a sportsbook line, e.g. for filtering
+    out longshot bets by odds range."""
+    if not 0.0 < prob < 1.0:
+        raise ValueError(f"prob must be in (0, 1), got {prob}")
+    if prob >= 0.5:
+        return -100.0 * prob / (1.0 - prob)
+    return 100.0 * (1.0 - prob) / prob
+
+
 def devig_two_way(prob_a: float, prob_b: float) -> tuple:
     """Normalize a pair of implied probabilities that sum to >1 (due to the
     bookmaker's vig) back down to a fair pair that sums to exactly 1."""

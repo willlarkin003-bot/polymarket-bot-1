@@ -7,6 +7,7 @@ from src.odds_provider import (
     average_american_odds,
     consensus_probability,
     devig_two_way,
+    implied_prob_to_american,
 )
 
 
@@ -16,6 +17,27 @@ def test_american_to_implied_prob_favorite():
 
 def test_american_to_implied_prob_underdog():
     assert american_to_implied_prob(130) == pytest.approx(100 / 230)
+
+
+def test_implied_prob_to_american_favorite():
+    assert implied_prob_to_american(0.6) == pytest.approx(-150)
+
+
+def test_implied_prob_to_american_underdog():
+    # ~14.29% implied - the +600 boundary of the "no extreme longshots" filter
+    assert implied_prob_to_american(100 / 700) == pytest.approx(600)
+
+
+def test_implied_prob_to_american_round_trips_with_american_to_implied_prob():
+    for odds in (-300, -150, -110, 110, 150, 600, 2500):
+        assert implied_prob_to_american(american_to_implied_prob(odds)) == pytest.approx(odds)
+
+
+def test_implied_prob_to_american_rejects_out_of_range():
+    with pytest.raises(ValueError):
+        implied_prob_to_american(0.0)
+    with pytest.raises(ValueError):
+        implied_prob_to_american(1.0)
 
 
 def test_devig_two_way_sums_to_one():

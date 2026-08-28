@@ -148,3 +148,37 @@ def test_long_dated_cap_resets_for_positions_from_prior_weeks(config, state):
     )
     check = risk.check("m2", make_decision(), resolves_at=far_future)
     assert check.approved
+
+
+def test_approves_bet_within_default_odds_range(config, state):
+    risk = RiskManager(config, state)
+    check = risk.check("m1", make_decision(), price=0.5)  # -100, within default -150..+600
+    assert check.approved
+
+
+def test_rejects_longshot_bet_outside_odds_range(config, state):
+    # ~2% implied win probability -> roughly +4900, e.g. risking $25 to win $2500
+    risk = RiskManager(config, state)
+    check = risk.check("m1", make_decision(), price=0.02)
+    assert not check.approved
+    assert "odds" in check.reason
+
+
+def test_rejects_heavily_favored_bet_outside_odds_range(config, state):
+    risk = RiskManager(config, state)
+    check = risk.check("m1", make_decision(), price=0.8)  # -400, more favored than -150
+    assert not check.approved
+    assert "odds" in check.reason
+
+
+def test_skips_odds_range_check_when_price_not_given(config, state):
+    risk = RiskManager(config, state)
+    check = risk.check("m1", make_decision())  # no price passed
+    assert check.approved
+
+
+def test_odds_range_is_configurable(config, state):
+    config = replace(config, min_american_odds=-1000.0, max_american_odds=5000.0)
+    risk = RiskManager(config, state)
+    check = risk.check("m1", make_decision(), price=0.02)  # would be rejected under the default range
+    assert check.approved

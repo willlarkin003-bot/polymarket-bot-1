@@ -166,13 +166,14 @@ class TradingAgent:
                 min_edge=self.config.min_edge,
             )
 
-            check = self.risk.check(market.market_id, decision, resolves_at=market.resolves_at)
+            price = market.yes_price if decision.side == "YES" else 1.0 - market.yes_price
+
+            check = self.risk.check(market.market_id, decision, resolves_at=market.resolves_at, price=price)
             if not check.approved:
                 logger.debug("Skipping market %s: %s", market.market_id, check.reason)
                 risk_rejected += 1
                 continue
 
-            price = market.yes_price if decision.side == "YES" else 1.0 - market.yes_price
             avg_book_odds = (avg_yes_odds if decision.side == "YES" else avg_no_odds) or 0.0
 
             logger.info(
