@@ -4,6 +4,9 @@ LEAGUE_TO_ODDS_SPORT_KEY = {
     "nfl": "americanfootball_nfl",
     "college football": "americanfootball_ncaaf",
     "ncaaf": "americanfootball_ncaaf",
+    # "wnba" must be checked before "nba" - "nba" is a substring of "wnba",
+    # so the shorter key would otherwise win and query the wrong league.
+    "wnba": "basketball_wnba",
     "nba": "basketball_nba",
     "college basketball": "basketball_ncaab",
     "ncaab": "basketball_ncaab",
@@ -13,6 +16,7 @@ LEAGUE_TO_ODDS_SPORT_KEY = {
     "epl": "soccer_epl",
     "champions league": "soccer_uefa_champs_league",
     "mls": "soccer_usa_mls",
+    "brasileirao": "soccer_brazil_campeonato",
     "ufc": "mma_mixed_martial_arts",
     "atp": "tennis_atp",
     "wta": "tennis_wta",
