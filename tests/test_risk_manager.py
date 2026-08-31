@@ -150,60 +150,63 @@ def test_long_dated_cap_resets_for_positions_from_prior_weeks(config, state):
     assert check.approved
 
 
-def test_approves_bet_within_default_odds_range(config, state):
+def test_approves_bet_at_moderate_odds(config, state):
     risk = RiskManager(config, state)
-    check = risk.check("m1", make_decision(), price=0.5)  # -100, within default -150..+600
+    check = risk.check("m1", make_decision(), price=0.5)  # -100, well within bounds
     assert check.approved
 
 
-def test_rejects_longshot_bet_outside_odds_range(config, state):
-    # ~2% implied win probability -> roughly +4900, e.g. risking $25 to win $2500
+def test_never_rejects_a_longshot_just_shrinks_its_stake(config, state):
+    # ~2% implied win probability -> roughly +4900, e.g. risking $25 to win $2500.
+    # No longer an outright rejection - check() approves it, and it's
+    # graduated_max_stake()'s job (exercised by agent.py) to size it small.
     risk = RiskManager(config, state)
-    check = risk.check("m1", make_decision(), price=0.02)
+    check = risk.check("m1", make_decision(stake_usd=1.0), price=0.02)
+    assert check.approved
+
+
+def test_rejects_bet_more_favored_than_the_floor(config, state):
+    risk = RiskManager(config, state)
+    check = risk.check("m1", make_decision(), price=0.8)  # -400, more favored than the -200 floor
     assert not check.approved
     assert "odds" in check.reason
 
 
-def test_rejects_heavily_favored_bet_outside_odds_range(config, state):
-    risk = RiskManager(config, state)
-    check = risk.check("m1", make_decision(), price=0.8)  # -400, more favored than -150
-    assert not check.approved
-    assert "odds" in check.reason
-
-
-def test_skips_odds_range_check_when_price_not_given(config, state):
+def test_skips_odds_floor_check_when_price_not_given(config, state):
     risk = RiskManager(config, state)
     check = risk.check("m1", make_decision())  # no price passed
     assert check.approved
 
 
-def test_odds_range_is_configurable(config, state):
-    config = replace(config, min_american_odds=-1000.0, max_american_odds=5000.0)
+def test_favorite_floor_is_configurable(config, state):
+    config = replace(config, min_american_odds=-1000.0)
     risk = RiskManager(config, state)
-    check = risk.check("m1", make_decision(), price=0.02)  # would be rejected under the default range
+    check = risk.check("m1", make_decision(), price=0.8)  # rejected under the default -200 floor
     assert check.approved
 
 
-def test_graduated_max_stake_at_favorite_edge(config, state):
+def test_graduated_max_stake_flat_within_the_normal_zone(config, state):
     risk = RiskManager(config, state)
-    # -200 (favorite edge of the default range) -> implied prob 200/300
-    assert risk.graduated_max_stake(200 / 300) == pytest.approx(config.favorite_max_stake_usd)
+    # Anything at or more favored than +600 (the normal-zone edge) gets the
+    # full favorite stake, not just the exact boundary price.
+    assert risk.graduated_max_stake(100 / 700) == pytest.approx(config.favorite_max_stake_usd)  # +600
+    assert risk.graduated_max_stake(0.5) == pytest.approx(config.favorite_max_stake_usd)  # -100
 
 
-def test_graduated_max_stake_at_longshot_edge(config, state):
+def test_graduated_max_stake_at_extreme_edge(config, state):
     risk = RiskManager(config, state)
-    # +600 (longshot edge of the default range) -> implied prob 100/700
-    assert risk.graduated_max_stake(100 / 700) == pytest.approx(config.longshot_max_stake_usd)
+    # EXTREME_AMERICAN_ODDS (default +3000) -> implied prob 100/3100
+    assert risk.graduated_max_stake(100 / 3100) == pytest.approx(config.longshot_max_stake_usd)
 
 
-def test_graduated_max_stake_interpolates_between_edges(config, state):
+def test_graduated_max_stake_tapers_between_normal_and_extreme(config, state):
     risk = RiskManager(config, state)
-    midpoint_prob = (200 / 300 + 100 / 700) / 2
+    midpoint_prob = (100 / 700 + 100 / 3100) / 2  # halfway between +600 and +3000
     cap = risk.graduated_max_stake(midpoint_prob)
     assert config.longshot_max_stake_usd < cap < config.favorite_max_stake_usd
 
 
-def test_graduated_max_stake_clamps_beyond_either_edge(config, state):
+def test_graduated_max_stake_floors_out_beyond_extreme_edge(config, state):
     risk = RiskManager(config, state)
-    assert risk.graduated_max_stake(0.95) == pytest.approx(config.favorite_max_stake_usd)
-    assert risk.graduated_max_stake(0.01) == pytest.approx(config.longshot_max_stake_usd)
+    # ~2% implied -> beyond +3000 - still just the minimum unit, never less
+    assert risk.graduated_max_stake(0.02) == pytest.approx(config.longshot_max_stake_usd)

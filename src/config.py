@@ -46,6 +46,7 @@ class Config:
     market_fetch_limit: int = 150
     min_american_odds: float = -200.0
     max_american_odds: float = 600.0
+    extreme_american_odds: float = 3000.0
     favorite_max_stake_usd: float = 25.0
     longshot_max_stake_usd: float = 5.0
 
@@ -73,6 +74,7 @@ class Config:
             market_fetch_limit=_int_env("MARKET_FETCH_LIMIT", 150),
             min_american_odds=_float_env("MIN_AMERICAN_ODDS", -200.0),
             max_american_odds=_float_env("MAX_AMERICAN_ODDS", 600.0),
+            extreme_american_odds=_float_env("EXTREME_AMERICAN_ODDS", 3000.0),
             favorite_max_stake_usd=_float_env("FAVORITE_MAX_STAKE_USD", 25.0),
             longshot_max_stake_usd=_float_env("LONGSHOT_MAX_STAKE_USD", 5.0),
         )

@@ -265,10 +265,11 @@ def test_longshot_bet_gets_clamped_to_longshot_max_stake(monkeypatch, tmp_path):
     db_path = str(tmp_path / "state.db")
     monkeypatch.setattr(agent_module, "StateStore", lambda: StateStore(db_path=db_path))
 
-    # 15% implied win probability - a real longshot, but still inside the
-    # default -200..+600 accepted odds range (whose longshot edge is ~14.3%).
+    # 3% implied win probability (~+3233 American odds) - well past the
+    # +600 normal-zone edge and past the default +3000 EXTREME_AMERICAN_ODDS
+    # floor point too, e.g. risking $25 to win $2500-plus.
     market = SportsMarket(market_id="m1", question="Longshot to win?", description="",
-                           yes_price=0.15, outcome_labels=["X"])
+                           yes_price=0.03, outcome_labels=["X"])
     monkeypatch.setattr(agent_module, "fetch_open_sports_markets", lambda client, **kwargs: [market])
 
     class FakeSignalEngine:
@@ -276,7 +277,7 @@ def test_longshot_bet_gets_clamped_to_longshot_max_stake(monkeypatch, tmp_path):
             pass
 
         def estimate_probability(self, **kwargs):
-            return 0.30  # model thinks it's undervalued -> positive edge on YES
+            return 0.10  # model thinks it's undervalued -> positive edge on YES
 
     monkeypatch.setattr(agent_module, "SignalEngine", FakeSignalEngine)
 
@@ -285,11 +286,11 @@ def test_longshot_bet_gets_clamped_to_longshot_max_stake(monkeypatch, tmp_path):
 
     trades = agent.state.recent_trades()
     assert len(trades) == 1
-    # Without the graduated cap, half-Kelly capped at max_position_pct would
-    # stake the full $50 (5% of $1000) - it should be clamped down near the
-    # $5 longshot floor instead.
-    assert trades[0]["stake_usd"] == pytest.approx(agent.risk.graduated_max_stake(0.15))
-    assert trades[0]["stake_usd"] < 10.0
+    # It's still placed (never rejected outright for being too much of a
+    # longshot) - just sized down to the $5 floor instead of the $50 that
+    # half-Kelly capped at max_position_pct would otherwise stake.
+    assert trades[0]["stake_usd"] == pytest.approx(agent.risk.graduated_max_stake(0.03))
+    assert trades[0]["stake_usd"] == pytest.approx(5.0)
 
 
 def test_near_even_bet_is_not_clamped_to_the_longshot_floor(monkeypatch, tmp_path):

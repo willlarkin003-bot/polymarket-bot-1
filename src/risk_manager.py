@@ -20,18 +20,19 @@ class RiskManager:
         self.state = state
 
     def graduated_max_stake(self, price: float) -> float:
-        """Interpolate the stake cap between LONGSHOT_MAX_STAKE_USD (at the
-        longshot edge of the allowed odds range, MAX_AMERICAN_ODDS) and
-        FAVORITE_MAX_STAKE_USD (at the favorite edge, MIN_AMERICAN_ODDS) - the
-        closer to even the bet, the more it's allowed to stake. Bets outside
-        the allowed range clamp to whichever edge they're nearest, but those
-        get rejected by check()'s odds-range test anyway."""
-        p_favorite_edge = american_to_implied_prob(self.config.min_american_odds)
-        p_longshot_edge = american_to_implied_prob(self.config.max_american_odds)
-        span = p_favorite_edge - p_longshot_edge
+        """FAVORITE_MAX_STAKE_USD for anything at or more favored than
+        MAX_AMERICAN_ODDS (the "normal" zone - never tapered, just capped
+        flat). Beyond that, as the bet gets more of a longshot, the cap
+        tapers down toward LONGSHOT_MAX_STAKE_USD, reaching it once odds hit
+        EXTREME_AMERICAN_ODDS and staying there no matter how extreme the
+        odds get from there - a longshot never gets rejected outright by
+        check(), just sized down to a small unit."""
+        p_normal_edge = american_to_implied_prob(self.config.max_american_odds)
+        p_extreme_edge = american_to_implied_prob(self.config.extreme_american_odds)
+        span = p_normal_edge - p_extreme_edge
         if span <= 0:
             return self.config.favorite_max_stake_usd
-        t = (price - p_longshot_edge) / span
+        t = (price - p_extreme_edge) / span
         t = max(0.0, min(1.0, t))
         return self.config.longshot_max_stake_usd + t * (
             self.config.favorite_max_stake_usd - self.config.longshot_max_stake_usd
@@ -49,11 +50,11 @@ class RiskManager:
 
         if price is not None:
             american_odds = implied_prob_to_american(price)
-            if not (self.config.min_american_odds <= american_odds <= self.config.max_american_odds):
+            if american_odds < self.config.min_american_odds:
                 return RiskCheck(
                     False,
-                    f"odds {american_odds:+.0f} outside configured range "
-                    f"({self.config.min_american_odds:+.0f} to {self.config.max_american_odds:+.0f})",
+                    f"odds {american_odds:+.0f} more favored than the configured floor "
+                    f"({self.config.min_american_odds:+.0f}) - no edge is worth that little payout",
                 )
 
         if self.state.has_position(market_id):
